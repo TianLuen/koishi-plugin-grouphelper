@@ -58,6 +58,8 @@ export const name = 'grouphelper'
 export const usage = `
 # 使用说明请查看github readme。
 https://github.com/camvanaa/koishi-plugin-grouphelper#readme
+
+本配置页面默认为全局配置，群配置请到群内使用指令配置
 `
 
 // 定义配置接口
@@ -96,7 +98,6 @@ export interface Config {
   }
   guildRequest: {
     enabled: boolean
-    keywords: string[]
     rejectMessage: string
   }
   setEssenceMsg: {
@@ -174,11 +175,9 @@ export const Config: Schema<Config> = Schema.object({
   }).description('好友申请设置'),
   guildRequest: Schema.object({
     enabled: Schema.boolean().default(false)
-      .description('是否启用入群邀请关键词验证'),
-    keywords: Schema.array(Schema.string()).default([])
-      .description('入群邀请通过关键词列表'),
-    rejectMessage: Schema.string().default('请输入正确的验证信息')
-      .description('入群邀请拒绝时的提示消息')
+      .description('是否自动同意入群邀请（启用时同意所有，禁用时拒绝所有）'),
+    rejectMessage: Schema.string().default('暂不接受入群邀请')
+      .description('拒绝入群邀请时的提示消息')
   }).description('入群邀请设置'),
   setEssenceMsg: Schema.object({
     enabled: Schema.boolean().default(true)
@@ -198,9 +197,12 @@ export const Config: Schema<Config> = Schema.object({
 
 // 数据库接口
 interface WarnRecord {
-  userId: string
-  count: number
-  timestamp: number
+  groups: {
+    [guildId: string]: {
+      count: number
+      timestamp: number
+    }
+  }
 }
 
 interface BlacklistRecord {
@@ -460,27 +462,12 @@ export function apply(ctx: Context) {
       return
     }
 
-    // 如果未启用关键词验证，不处理请求
-    if (!ctx.config.guildRequest.enabled) return
-
-    // 检查关键词（忽略大小写）
-    if (ctx.config.guildRequest.keywords.length > 0 && data.comment) {
-      const comment = data.comment.toLowerCase()
-      for (const keyword of ctx.config.guildRequest.keywords) {
-        try {
-          const regex = new RegExp(keyword, 'i')
-          if (regex.test(data.comment)) {
-            await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, true)
-            return
-          }
-        } catch (e) {
-          if (data.comment.toLowerCase().includes(keyword.toLowerCase())) {
-            await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, true)
-            return
-          }
-        }
-      }
-      // 如果没有匹配到关键词，拒绝请求
+    // 根据配置决定是同意还是拒绝
+    if (ctx.config.guildRequest.enabled) {
+      // 启用时同意所有邀请
+      await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, true)
+    } else {
+      // 禁用时拒绝所有邀请
       await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, false, ctx.config.guildRequest.rejectMessage)
     }
   })
@@ -577,17 +564,28 @@ export function apply(ctx: Context) {
   ctx.command('warn <user:user> [count:number]', '警告用户', { authority: 3 })
     .action(async ({ session }, user, count = 1) => {
       if (!user) return '请指定用户'
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       
       const warns = readData(warnsPath)
       const userId = String(user).split(':')[1]
-      warns[userId] = warns[userId] || { count: 0, timestamp: 0 }
-      warns[userId].count += count
-      warns[userId].timestamp = Date.now()
+      
+      // 初始化用户记录
+      warns[userId] = warns[userId] || { groups: {} }
+      
+      // 初始化群记录
+      warns[userId].groups[session.guildId] = warns[userId].groups[session.guildId] || {
+        count: 0,
+        timestamp: 0
+      }
+      
+      // 更新警告次数
+      warns[userId].groups[session.guildId].count += count
+      warns[userId].groups[session.guildId].timestamp = Date.now()
       
       saveData(warnsPath, warns)
 
       // 自动执行 autoban
-      const warnCount = warns[userId].count
+      const warnCount = warns[userId].groups[session.guildId].count
       let duration
       if (warnCount >= ctx.config.warnLimit * 3) {
         duration = ctx.config.banTimes.third
@@ -603,13 +601,16 @@ export function apply(ctx: Context) {
           await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
           // 添加禁言记录
           recordMute(session.guildId, userId, milliseconds)
-          return `已警告用户 ${userId}，当前警告次数：${warns[userId].count}\n已自动禁言 ${duration}`
+          return `已警告用户 ${userId}
+本群警告：${warnCount} 次
+已自动禁言 ${duration}`
         } catch (e) {
           return `警告已记录，但自动禁言失败：${e.message}`
         }
       }
 
-      return `已警告用户 ${userId}，当前警告次数：${warns[userId].count}`
+      return `已警告用户 ${userId}
+本群警告：${warnCount} 次`
     })
 
   // kick命令
@@ -705,15 +706,17 @@ export function apply(ctx: Context) {
         
         // 清理警告次数为0的记录
         for (const userId in warns) {
-          if (warns[userId].count <= 0) {
+          if (warns[userId].groups[session.guildId]?.count <= 0) {
             delete warns[userId]
           }
         }
         saveData(warnsPath, warns)
         
-        const formatWarns = Object.entries(warns).map(([userId, data]: [string, WarnRecord]) => 
-          `用户 ${userId}：${data.count} 次 (${new Date(data.timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})`
-        ).join('\n')
+        const formatWarns = Object.entries(warns)
+          .filter(([, data]: [string, WarnRecord]) => data.groups[session.guildId]?.count > 0)
+          .map(([userId, data]: [string, WarnRecord]) => 
+            `用户 ${userId}：${data.groups[session.guildId].count} 次 (${new Date(data.groups[session.guildId].timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})`
+          ).join('\n')
         
         const formatBlacklist = Object.entries(blacklist).map(([userId, data]: [string, BlacklistRecord]) => 
           `用户 ${userId}：${new Date(data.timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
@@ -797,12 +800,6 @@ ${formatBlacklist || '无记录'}
 当前概率：${(currentProb * 100).toFixed(2)}%
 状态：${currentBanMe.guaranteed ? '大保底' : '普通'}
 当前最大禁言：${maxDuration}
-金卡设置：
-· 基础概率：${(ctx.config.banme.jackpot.baseProb * 100).toFixed(2)}%
-· 软保底：${ctx.config.banme.jackpot.softPity} 抽
-· 硬保底：${ctx.config.banme.jackpot.hardPity} 抽
-· UP奖励：${ctx.config.banme.jackpot.upDuration}
-· 歪了奖励：${ctx.config.banme.jackpot.loseDuration}
 
 === 当前禁言 ===
 ${formatMutes || '无记录'}`
@@ -832,31 +829,46 @@ ${formatMutes || '无记录'}`
       if (options.w) {
         const warns = readData(warnsPath)
         if (options.a) {
-          warns[options.a] = warns[options.a] || { count: 0, timestamp: Date.now() }
-          warns[options.a].count += parseInt(content) || 1
-          warns[options.a].timestamp = Date.now()
+          if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+          
+          warns[options.a] = warns[options.a] || { groups: {} }
+          warns[options.a].groups[session.guildId] = warns[options.a].groups[session.guildId] || {
+            count: 0,
+            timestamp: 0
+          }
+          warns[options.a].groups[session.guildId].count += parseInt(content) || 1
+          warns[options.a].groups[session.guildId].timestamp = Date.now()
           saveData(warnsPath, warns)
-          return `已增加 ${options.a} 的警告次数，当前为：${warns[options.a].count}`
+          return `已增加 ${options.a} 的警告次数，当前为：${warns[options.a].groups[session.guildId].count}`
         }
         if (options.r) {
-          if (warns[options.r]) {
-            warns[options.r].count -= parseInt(content) || 1
-            if (warns[options.r].count <= 0) {
-              delete warns[options.r]
+          if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+          
+          if (warns[options.r]?.groups[session.guildId]) {
+            warns[options.r].groups[session.guildId].count -= parseInt(content) || 1
+            if (warns[options.r].groups[session.guildId].count <= 0) {
+              delete warns[options.r].groups[session.guildId]
+              if (Object.keys(warns[options.r].groups).length === 0) {
+                delete warns[options.r]
+              }
               saveData(warnsPath, warns)
               return `已移除 ${options.r} 的警告记录`
             }
-            warns[options.r].timestamp = Date.now()
+            warns[options.r].groups[session.guildId].timestamp = Date.now()
             saveData(warnsPath, warns)
-            return `已减少 ${options.r} 的警告次数，当前为：${warns[options.r].count}`
+            return `已减少 ${options.r} 的警告次数，当前为：${warns[options.r].groups[session.guildId].count}`
           }
           return '未找到该用户的警告记录'
         }
         // 显示当前警告记录
-        const formatWarns = Object.entries(warns).map(([userId, data]: [string, WarnRecord]) => 
-          `用户 ${userId}：${data.count} 次 (${new Date(data.timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})`
-        ).join('\n')
-        return `=== 当前警告记录 ===\n${formatWarns || '无记录'}`
+        if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+        
+        const formatWarns = Object.entries(warns)
+          .filter(([, data]: [string, WarnRecord]) => data.groups[session.guildId]?.count > 0)
+          .map(([userId, data]: [string, WarnRecord]) => 
+            `用户 ${userId}：${data.groups[session.guildId].count} 次 (${new Date(data.groups[session.guildId].timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })})`
+          ).join('\n')
+        return `=== 当前群警告记录 ===\n${formatWarns || '无记录'}`
       }
 
       // 如果没有指定操作，显示帮助信息
@@ -871,13 +883,14 @@ ${formatMutes || '无记录'}`
   ctx.command('check <user:user>', '查询用户记录', { authority: 3 })
     .action(async ({ session }, user) => {
       if (!user) return '请指定用户'
-      const userId = String(user).split(':')[1]
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       
+      const userId = String(user).split(':')[1]
       const warns = readData(warnsPath)
       const blacklist = readData(blacklistPath)
       
       let response = `喵喵！${userId} 的记录如下：
-警告次数：${warns[userId]?.count || 0}
+本群警告次数：${warns[userId]?.groups[session.guildId]?.count || 0}
 是否在黑名单：${blacklist[userId] ? '是喵...' : '不是喵~'}`
       
       return response
@@ -1030,10 +1043,11 @@ ${formatMutes || '无记录'}`
   ctx.command('autoban <user:user>', '根据警告次数自动禁言', { authority: 3 })
     .action(async ({ session }, user) => {
       if (!user) return '请指定用户'
-      const userId = String(user).split(':')[1]
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       
+      const userId = String(user).split(':')[1]
       const warns = readData(warnsPath)
-      const warnCount = warns[userId]?.count || 0
+      const warnCount = warns[userId]?.groups[session.guildId]?.count || 0
       
       let duration
       if (warnCount >= ctx.config.warnLimit * 3) {
@@ -1043,7 +1057,7 @@ ${formatMutes || '无记录'}`
       } else if (warnCount >= ctx.config.warnLimit) {
         duration = ctx.config.banTimes.first
       } else {
-        return `喵呜...警告次数（${warnCount}）还不够呢，再观察一下吧~`
+        return `喵呜...本群警告次数（${warnCount}）还不够呢，再观察一下吧~`
       }
       
       try {
@@ -1051,7 +1065,9 @@ ${formatMutes || '无记录'}`
         await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
         // 添加禁言记录
         recordMute(session.guildId, userId, milliseconds)
-        return `已经按照警告次数把 ${userId} 禁言啦喵！`
+        return `已经按照警告次数把 ${userId} 禁言啦喵！
+本群警告：${warnCount} 次
+禁言时长：${duration}`
       } catch (e) {
         return `出错啦喵...${e.message}`
       }
@@ -1132,8 +1148,7 @@ config  配置管理：
 · 关键词：${ctx.config.friendRequest.keywords.join('、') || '无'}
 · 拒绝提示：${ctx.config.friendRequest.rejectMessage}
 
-入群邀请验证：${ctx.config.guildRequest.enabled ? '已启用' : '未启用'}
-· 关键词：${ctx.config.guildRequest.keywords.join('、') || '无'}
+入群邀请：${ctx.config.guildRequest.enabled ? '自动同意' : '自动拒绝'}
 · 拒绝提示：${ctx.config.guildRequest.rejectMessage}
 
 入群申请验证：已启用
