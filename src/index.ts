@@ -7,9 +7,7 @@ declare module 'koishi' {
     keywords: string[]
     warnLimit: number
     banTimes: {
-      first: string
-      second: string
-      third: string
+      expression: string  // 使用表达式替代固定的三个等级
     }
     keywordBan: {
       enabled: boolean
@@ -67,9 +65,7 @@ export interface Config {
   keywords: string[]  // 入群审核关键词
   warnLimit: number
   banTimes: {
-    first: string
-    second: string
-    third: string
+    expression: string  // 使用表达式替代固定的三个等级
   }
   keywordBan: {
     enabled: boolean
@@ -125,12 +121,8 @@ export const Config: Schema<Config> = Schema.object({
   warnLimit: Schema.number().default(3)
     .description('警告达到多少次触发自动禁言'),
   banTimes: Schema.object({
-    first: Schema.string().default('1h')
-      .description('第一次自动禁言时长'),
-    second: Schema.string().default('12h')
-      .description('第二次自动禁言时长'),
-    third: Schema.string().default('24h')
-      .description('第三次自动禁言时长')
+    expression: Schema.string().default('{t}^2h')
+      .description('警告禁言时长表达式，{t}代表警告次数。例：{t}^2h 表示警告次数的平方小时')
   }).description('自动禁言时长设置'),
   keywordBan: Schema.object({
     enabled: Schema.boolean().default(false)
@@ -584,26 +576,21 @@ export function apply(ctx: Context) {
       
       saveData(warnsPath, warns)
 
-      // 自动执行 autoban
+      // 获取当前警告次数
       const warnCount = warns[userId].groups[session.guildId].count
-      let duration
-      if (warnCount >= ctx.config.warnLimit * 3) {
-        duration = ctx.config.banTimes.third
-      } else if (warnCount >= ctx.config.warnLimit * 2) {
-        duration = ctx.config.banTimes.second
-      } else if (warnCount >= ctx.config.warnLimit) {
-        duration = ctx.config.banTimes.first
-      }
-
-      if (duration) {
+      
+      // 如果警告次数达到限制，执行禁言
+      if (warnCount >= ctx.config.warnLimit) {
         try {
-          const milliseconds = parseTimeString(duration)
+          // 替换表达式中的变量
+          const expression = ctx.config.banTimes.expression.replace(/\{t\}/g, warnCount.toString())
+          const milliseconds = parseTimeString(expression)
           await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
           // 添加禁言记录
           recordMute(session.guildId, userId, milliseconds)
           return `已警告用户 ${userId}
 本群警告：${warnCount} 次
-已自动禁言 ${duration}`
+已自动禁言 ${formatDuration(milliseconds)}`
         } catch (e) {
           return `警告已记录，但自动禁言失败：${e.message}`
         }
@@ -783,9 +770,8 @@ export function apply(ctx: Context) {
 
 === 自动禁言配置 ===
 警告限制：${ctx.config.warnLimit} 次
-第一次：${ctx.config.banTimes.first}
-第二次：${ctx.config.banTimes.second}
-第三次：${ctx.config.banTimes.third}
+禁言时长表达式：${ctx.config.banTimes.expression}
+（{t}代表警告次数）
 
 === 警告记录 ===
 ${formatWarns || '无记录'}
@@ -1049,25 +1035,20 @@ ${formatMutes || '无记录'}`
       const warns = readData(warnsPath)
       const warnCount = warns[userId]?.groups[session.guildId]?.count || 0
       
-      let duration
-      if (warnCount >= ctx.config.warnLimit * 3) {
-        duration = ctx.config.banTimes.third
-      } else if (warnCount >= ctx.config.warnLimit * 2) {
-        duration = ctx.config.banTimes.second
-      } else if (warnCount >= ctx.config.warnLimit) {
-        duration = ctx.config.banTimes.first
-      } else {
+      if (warnCount < ctx.config.warnLimit) {
         return `喵呜...本群警告次数（${warnCount}）还不够呢，再观察一下吧~`
       }
       
       try {
-        const milliseconds = parseTimeString(duration)
+        // 替换表达式中的变量
+        const expression = ctx.config.banTimes.expression.replace(/\{t\}/g, warnCount.toString())
+        const milliseconds = parseTimeString(expression)
         await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
         // 添加禁言记录
         recordMute(session.guildId, userId, milliseconds)
         return `已经按照警告次数把 ${userId} 禁言啦喵！
 本群警告：${warnCount} 次
-禁言时长：${duration}`
+禁言时长：${formatDuration(milliseconds)}`
       } catch (e) {
         return `出错啦喵...${e.message}`
       }
@@ -1525,15 +1506,31 @@ welcome -t  测试当前欢迎语`
         // 读取当前禁言记录
         const mutes = readData(mutesPath)
         const currentMutes = mutes[session.guildId] || {}
+        const now = Date.now()
         
         // 解除所有人的禁言
         let count = 0
         for (const userId in currentMutes) {
           if (!currentMutes[userId].leftGroup) {
             try {
-              await session.bot.muteGuildMember(session.guildId, userId, 0)
-              delete currentMutes[userId]
-              count++
+              // 检查记录中的禁言是否已经结束
+              const muteEndTime = currentMutes[userId].startTime + currentMutes[userId].duration
+              if (now >= muteEndTime) {
+                // 如果禁言已经结束，直接删除记录
+                delete currentMutes[userId]
+                continue
+              }
+
+              // 检查用户是否真的处于禁言状态
+              const memberInfo = await session.bot.internal.getGroupMemberInfo(session.guildId, userId, false)
+              if (memberInfo.shut_up_timestamp > 0) {
+                await session.bot.muteGuildMember(session.guildId, userId, 0)
+                delete currentMutes[userId]
+                count++
+              } else {
+                // 如果用户实际上没有被禁言，直接删除记录
+                delete currentMutes[userId]
+              }
             } catch (e) {
               // 忽略单个用户解除失败的情况，继续处理其他用户
               console.error(`解除用户 ${userId} 禁言失败:`, e)
