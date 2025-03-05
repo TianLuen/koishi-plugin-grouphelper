@@ -1,6 +1,7 @@
 import { Context, Schema, Command, Argv } from 'koishi'
 import * as fs from 'fs'
 import * as path from 'path'
+import { createWriteStream } from 'fs'
 
 declare module 'koishi' {
   interface Config {
@@ -47,6 +48,10 @@ declare module 'koishi' {
       enabled: boolean
       authority: number
       maxLength: number
+    }
+    antiRepeat: {
+      enabled: boolean
+      threshold: number
     }
   }
 }
@@ -104,6 +109,10 @@ export interface Config {
     enabled: boolean
     authority: number
     maxLength: number
+  }
+  antiRepeat: {
+    enabled: boolean
+    threshold: number
   }
 }
 
@@ -184,7 +193,13 @@ export const Config: Schema<Config> = Schema.object({
       .description('设置头衔所需权限等级'),
     maxLength: Schema.number().default(18)
       .description('头衔最大长度')
-  }).description('头衔设置')
+  }).description('头衔设置'),
+  antiRepeat: Schema.object({
+    enabled: Schema.boolean().default(false)
+      .description('是否启用反复读功能'),
+    threshold: Schema.number().default(3)
+      .description('触发反复读处理的次数阈值（超过该次数将撤回除第一条外的所有复读消息）')
+  }).description('反复读设置')
 })
 
 // 数据库接口
@@ -224,6 +239,16 @@ interface LockedName {
   name: string
 }
 
+// 修改日志记录接口
+interface LogRecord {
+  time: string
+  command: string
+  user: string
+  group: string
+  target: string
+  result: string
+}
+
 export function apply(ctx: Context) {
   // 数据存储路径
   const dataPath = path.resolve(ctx.baseDir, 'data/grouphelper')
@@ -236,6 +261,9 @@ export function apply(ctx: Context) {
   const banMeRecordsPath = path.resolve(dataPath, 'banme_records.json')
   // 添加锁定名称记录存储
   const lockedNamesPath = path.resolve(dataPath, 'locked_names.json')
+  // 添加日志文件路径
+  const logPath = path.resolve(dataPath, 'grouphelper.log')
+  const logStream = createWriteStream(logPath, { flags: 'a' })
 
   // 确保数据目录存在
   if (!fs.existsSync(dataPath)) {
@@ -292,36 +320,65 @@ export function apply(ctx: Context) {
 
   // 添加表达式解析函数
   function evaluateExpression(expr: string): number {
-    try {
-      // 移除所有空格
-      expr = expr.replace(/\s/g, '')
-      
-      // 安全检查：只允许数字、基本运算符、括号、sqrt和x
-      if (!/^[\d+\-*/()^.esqrtx]+$/.test(expr)) {
-        throw new Error(`表达式包含非法字符: ${expr}`)
-      }
-
-      // 替换科学计数法
-      expr = expr.replace(/(\d+)e(\d+)/g, '($1*10**$2)')
-      
-      // 替换 x 为 *
-      expr = expr.replace(/x/g, '*')
-      
-      // 替换 ^ 为 **
-      expr = expr.replace(/\^/g, '**')
-      
-      // 替换 sqrt 为 Math.sqrt
-      expr = expr.replace(/sqrt\(/g, 'Math.sqrt(')
-      
-      // 计算表达式
-      const result = eval(expr)
-      if (typeof result !== 'number' || isNaN(result)) {
-        throw new Error(`计算结果无效: ${result}`)
-      }
-      return result
-    } catch (e) {
-      throw new Error(`表达式计算错误: ${e.message}\n原始表达式: ${expr}`)
+    // 移除所有空格
+    expr = expr.replace(/\s/g, '')
+    
+    // 安全检查：只允许数字、基本运算符、括号、sqrt和x
+    if (!/^[\d+\-*/()^.esqrtx]+$/.test(expr)) {
+      throw new Error(`表达式包含非法字符: ${expr}`)
     }
+
+    // 替换 x 为 *
+    expr = expr.replace(/x/g, '*')
+
+    // 替换科学计数法
+    expr = expr.replace(/(\d+)e(\d+)/g, (_, base, exp) => 
+      String(Number(base) * Math.pow(10, Number(exp))))
+    
+    // 替换 sqrt
+    while (expr.includes('sqrt')) {
+      expr = expr.replace(/sqrt\(([^()]+)\)/g, (_, num) => 
+        String(Math.sqrt(calculateBasic(num))))
+    }
+    
+    return calculateBasic(expr)
+  }
+
+  // 添加基础计算函数
+  function calculateBasic(expr: string): number {
+    // 处理括号
+    while (expr.includes('(')) {
+      expr = expr.replace(/\(([^()]+)\)/g, (_, subExpr) => 
+        String(calculateBasic(subExpr)))
+    }
+
+    // 处理乘方
+    while (expr.includes('^')) {
+      expr = expr.replace(/(-?\d+\.?\d*)\^(-?\d+\.?\d*)/, (_, base, exp) => 
+        String(Math.pow(Number(base), Number(exp))))
+    }
+
+    // 处理乘除
+    while (/[*/]/.test(expr)) {
+      expr = expr.replace(/(-?\d+\.?\d*)[*/](-?\d+\.?\d*)/, (match, a, b) => {
+        if (match.includes('*')) return String(Number(a) * Number(b))
+        return String(Number(a) / Number(b))
+      })
+    }
+
+    // 处理加减
+    while (/[+\-]/.test(expr) && !/^-\d/.test(expr)) {
+      expr = expr.replace(/(-?\d+\.?\d*)[+\-](-?\d+\.?\d*)/, (match, a, b) => {
+        if (match.includes('+')) return String(Number(a) + Number(b))
+        return String(Number(a) - Number(b))
+      })
+    }
+
+    const result = Number(expr)
+    if (isNaN(result)) {
+      throw new Error(`计算结果无效: ${expr}`)
+    }
+    return result
   }
 
   // 定义时间限制常量（毫秒）
@@ -383,12 +440,23 @@ export function apply(ctx: Context) {
     }
   }
 
-  // 在 apply 函数开头添加日志记录函数
+  // 修改日志记录函数
   function logCommand(session: any, command: string, target: string, result: string) {
-    const time = new Date().toISOString()
+    // 获取当前时间并添加8小时偏移
+    const date = new Date()
+    date.setHours(date.getHours() + 8)
+    const time = date.toISOString()
+      .replace('T', ' ')
+      .replace('Z', '')  // 移除 Z 后缀，因为已经转换为北京时间
+
     const user = session.username || session.userId
     const group = session.guildId || 'private'
-    console.log(`[${time}] [${command}] User(${user}) Group(${group}) Target(${target}): ${result}`)
+    const logLine = `[${time}] [${command}] User(${user}) Group(${group}) Target(${target}): ${result}\n`
+    
+    // 写入日志文件
+    logStream.write(logLine)
+    // 同时保持控制台输出
+    console.log(logLine.trim())
   }
 
   // 添加工具函数来处理用户ID
@@ -1070,6 +1138,12 @@ banme [次数]  随机禁言自己
   · 金卡概率：0.6%（73抽后概率提升，89抽保底）
   · UP奖励：24小时禁言
   · 歪奖励：12小时禁言（下次必中UP）
+remoteban {QQ号} {群号} {时长}  远程禁言用户
+
+=== 警告系统（分群记录）===
+warn {@用户} [次数]  警告用户，默认1次
+check {@用户}  查询用户记录
+autoban {@用户}  根据警告次数自动禁言
 
 === 精华消息 ===
 essence  精华消息管理：
@@ -1082,10 +1156,11 @@ title  群头衔管理：
   -r  移除头衔
   -u @用户  为指定用户设置（可选）
 
-=== 警告系统 ===
-warn {@用户} [次数]  警告用户，默认1次
-check {@用户}  查询用户记录
-autoban {@用户}  根据警告次数自动禁言
+=== 日志管理 ===
+listlog [数量]  显示最近的操作记录，默认100条
+clearlog  清理日志文件（权限等级4）：
+  -d <天数>  保留最近几天的日志，默认7天
+  -a  清理所有日志
 
 === 关键词管理 ===
 groupkw  群关键词管理：
@@ -1124,17 +1199,7 @@ config  配置管理：
   · (sqrt(100)+1e1)^2s = 400秒 = 6分40秒
 · 时间范围：1秒 ~ 29天23小时59分59秒
 
-=== 验证设置 ===
-好友申请验证：${ctx.config.friendRequest.enabled ? '已启用' : '未启用'}
-· 关键词：${ctx.config.friendRequest.keywords.join('、') || '无'}
-· 拒绝提示：${ctx.config.friendRequest.rejectMessage}
-
-入群邀请：${ctx.config.guildRequest.enabled ? '自动同意' : '自动拒绝'}
-· 拒绝提示：${ctx.config.guildRequest.rejectMessage}
-
-入群申请验证：已启用
-· 全局关键词：${ctx.config.keywords.join('、') || '无'}
-· 群专属关键词：请使用 groupkw -p -l 查看`
+注：大部分命令需要权限等级 3 或以上`
     })
 
   // delmsg命令
@@ -1623,6 +1688,169 @@ welcome -t  测试当前欢迎语`
         return `出错啦喵...${e.message}`
       }
     })
+
+  // 添加 listlog 命令
+  ctx.command('listlog [lines:number]', '显示最近的操作记录', { authority: 3 })
+    .action(async ({ session }, lines = 100) => {
+      if (!fs.existsSync(logPath)) {
+        return '还没有任何日志记录喵~'
+      }
+
+      try {
+        // 读取日志文件的最后N行
+        const maxBuffer = 1024 * 1024 // 1MB buffer
+        const content = fs.readFileSync(logPath, 'utf8')
+        const allLines = content.split('\n').filter(line => line.trim())
+        const recentLines = allLines.slice(-lines)
+
+        if (recentLines.length === 0) {
+          return '还没有任何日志记录喵~'
+        }
+
+        // 格式化输出
+        return `=== 最近 ${Math.min(lines, recentLines.length)} 条操作记录 ===\n${recentLines.join('\n')}`
+      } catch (e) {
+        return `读取日志失败喵...${e.message}`
+      }
+    })
+
+  // 在程序结束时关闭日志流
+  ctx.on('dispose', () => {
+    logStream.end()
+  })
+
+  // 添加复读记录存储
+  interface RepeatRecord {
+    content: string
+    count: number
+    firstMessageId: string
+    messages: Array<{
+      id: string
+      userId: string
+      timestamp: number  // 添加这一行
+    }>
+  }
+
+  // 使用 Map 存储每个群的复读状态
+  const repeatMap = new Map<string, RepeatRecord>()
+
+  // 添加消息监听器处理复读
+  ctx.middleware(async (session, next) => {
+    if (!ctx.config.antiRepeat.enabled || !session.content || !session.guildId) return next()
+
+    const currentContent = session.content
+    const currentMessageId = session.messageId
+    const currentGuildId = session.guildId
+    const currentUserId = session.userId
+
+    const record = repeatMap.get(currentGuildId)
+
+    // 如果是新内容或没有记录
+    if (!record || record.content !== currentContent) {
+      repeatMap.set(currentGuildId, {
+        content: currentContent,
+        count: 1,
+        firstMessageId: currentMessageId,
+        messages: [{
+          id: currentMessageId,
+          userId: currentUserId,
+          timestamp: Date.now()  // 添加这一行
+        }]
+      })
+      return next()
+    }
+
+    // 更新复读记录
+    record.count++
+    record.messages.push({
+      id: currentMessageId,
+      userId: currentUserId,
+      timestamp: Date.now()  // 添加这一行
+    })
+
+    // 检查是否超过阈值
+    if (record.count > ctx.config.antiRepeat.threshold) {
+      try {
+        // 记录操作到日志
+        logCommand(session, 'antiRepeat', 'messages', 
+          `Deleted ${record.count - 1} repeated messages: ${currentContent}`)
+
+        // 撤回除第一条外的所有消息
+        for (let i = 1; i < record.messages.length; i++) {
+          const msg = record.messages[i]
+          try {
+            await session.bot.deleteMessage(session.channelId, msg.id)
+          } catch (e) {
+            console.error(`Failed to delete message ${msg.id}:`, e)
+          }
+          await sleep(300) // 添加短暂延迟避免频繁操作
+        }
+
+        // 发送提示消息
+        await session.send('喵！检测到复读，已经清理啦~')
+        
+        // 重置记录
+        repeatMap.delete(currentGuildId)
+      } catch (e) {
+        console.error('Error handling repeat messages:', e)
+      }
+    }
+
+    return next()
+  })
+
+  // 定期清理复读记录（1小时未更新的记录）
+  setInterval(() => {
+    const now = Date.now()
+    for (const [guildId, record] of repeatMap.entries()) {
+      if (now - record.messages[record.messages.length - 1].timestamp > 3600000) {
+        repeatMap.delete(guildId)
+      }
+    }
+  }, 3600000) // 每小时检查一次
+
+  // 在 apply 函数中添加 clearlog 命令
+  ctx.command('clearlog', '清理日志文件', { authority: 4 })  // 使用更高的权限等级
+    .option('d', '-d <days:number> 保留最近几天的日志')
+    .option('a', '-a 清理所有日志')
+    .action(async ({ session, options }) => {
+      if (!fs.existsSync(logPath)) {
+        return '还没有任何日志记录喵~'
+      }
+
+      try {
+        if (options.a) {
+          // 清空日志文件
+          fs.writeFileSync(logPath, '')
+          logCommand(session, 'clearlog', 'all', 'Cleared all logs')
+          return '已清理所有日志记录喵~'
+        }
+
+        const days = options.d || 7  // 默认保留7天
+        const now = Date.now()
+        const content = fs.readFileSync(logPath, 'utf8')
+        const allLines = content.split('\n').filter(line => line.trim())
+        
+        // 解析每行日志的时间并筛选
+        const keptLogs = allLines.filter(line => {
+          const match = line.match(/^\[(.*?)\]/)
+          if (!match) return false
+          
+          const logTime = new Date(match[1]).getTime()
+          return (now - logTime) <= days * 24 * 60 * 60 * 1000
+        })
+
+        // 写入保留的日志
+        fs.writeFileSync(logPath, keptLogs.join('\n') + '\n')
+        
+        const deletedCount = allLines.length - keptLogs.length
+        logCommand(session, 'clearlog', `${days}days`, `Cleared ${deletedCount} logs`)
+        
+        return `已清理 ${deletedCount} 条日志记录，保留最近 ${days} 天的记录喵~`
+      } catch (e) {
+        return `清理日志失败喵...${e.message}`
+      }
+    })
 }
 
 // 添加时间格式化函数
@@ -1639,5 +1867,10 @@ function formatDuration(milliseconds: number): string {
   if (seconds % 60 > 0) parts.push(`${seconds % 60}秒`)
 
   return parts.join('')
+}
+
+// 添加工具函数
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
