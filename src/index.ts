@@ -656,10 +656,10 @@ export function apply(ctx: Context) {
           await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
           // 添加禁言记录
           recordMute(session.guildId, userId, milliseconds)
-          return `已警告用户 ${userId}
-本群警告：${warnCount} 次
-已自动禁言 ${formatDuration(milliseconds)}`
+          logCommand(session, 'warn', userId, `Success: Warned ${warnCount} times, auto-muted for ${formatDuration(milliseconds)}`)
+          return `已警告用户 ${userId}\n本群警告：${warnCount} 次\n已自动禁言 ${formatDuration(milliseconds)}`
         } catch (e) {
+          logCommand(session, 'warn', userId, `Success: Warned ${warnCount} times, but auto-mute failed: ${e.message}`)
           return `警告已记录，但自动禁言失败：${e.message}`
         }
       }
@@ -734,7 +734,7 @@ export function apply(ctx: Context) {
           const blacklist = readData(blacklistPath)
           blacklist[userId] = { timestamp: Date.now() }
           saveData(blacklistPath, blacklist)
-          logCommand(session, 'kick', userId, `Success: Kicked and blacklisted in group ${targetGroup}`)
+          logCommand(session, 'kick', userId, `Success: Kicked and blacklisted from group ${targetGroup}`)
           return `已把坏人 ${userId} 踢出去并加入黑名单啦喵！`
         }
         
@@ -1220,9 +1220,11 @@ config  配置管理：
     .action(async ({ session }) => {
       try {
         await session.bot.internal.setGroupWholeBan(session.guildId, true)
+        logCommand(session, 'ban-all', session.guildId, 'Success: Enabled whole group ban')
         return '喵呜...全体禁言开启啦，大家都要乖乖的~'
       } catch (e) {
-        return `出错啦喵...${e.message}`
+        logCommand(session, 'ban-all', session.guildId, `Failed: ${e.message}`)
+        return `出错啦喵...${e}`
       }
     })
 
@@ -1231,9 +1233,11 @@ config  配置管理：
     .action(async ({ session }) => {
       try {
         await session.bot.internal.setGroupWholeBan(session.guildId, false)
+        logCommand(session, 'unban-all', session.guildId, 'Success: Disabled whole group ban')
         return '全体禁言解除啦喵，可以开心聊天啦~'
       } catch (e) {
-        return `出错啦喵...${e.message}`
+        logCommand(session, 'unban-all', session.guildId, `Failed: ${e.message}`)
+        return `出错啦喵...${e}`
       }
     })
 
@@ -1263,6 +1267,7 @@ config  配置管理：
           const newKeywords = options.a.split(',').map(k => k.trim()).filter(k => k)
           groupConfigs[session.guildId].approvalKeywords.push(...newKeywords)
           saveData(groupConfigPath, groupConfigs)
+          logCommand(session, 'groupkw', 'add', `Added keywords: ${newKeywords.join(', ')}`)
           return `已经添加了关键词：${newKeywords.join('、')} 喵喵喵~`
         }
 
@@ -1278,6 +1283,7 @@ config  配置管理：
           }
           if (removed.length > 0) {
             saveData(groupConfigPath, groupConfigs)
+            logCommand(session, 'groupkw', 'remove', `Removed keywords: ${removed.join(', ')}`)
             return `已经把关键词：${removed.join('、')} 删掉啦喵！`
           }
           return '未找到指定的关键词'
@@ -1294,6 +1300,7 @@ config  配置管理：
         const newKeywords = options.a.split(',').map(k => k.trim()).filter(k => k)
         groupConfigs[session.guildId].keywords.push(...newKeywords)
         saveData(groupConfigPath, groupConfigs)
+        logCommand(session, 'groupkw', 'add', `Added keywords: ${newKeywords.join(', ')}`)
         return `已经添加了关键词：${newKeywords.join('、')} 喵喵喵~`
       }
 
@@ -1309,6 +1316,7 @@ config  配置管理：
         }
         if (removed.length > 0) {
           saveData(groupConfigPath, groupConfigs)
+          logCommand(session, 'groupkw', 'remove', `Removed keywords: ${removed.join(', ')}`)
           return `已经把关键词：${removed.join('、')} 删掉啦喵！`
         }
         return '未找到指定的关键词'
@@ -1335,12 +1343,14 @@ config  配置管理：
       if (options.s) {
         groupConfigs[session.guildId].welcomeMsg = options.s
         saveData(groupConfigPath, groupConfigs)
+        logCommand(session, 'welcome', 'set', `Set welcome message: ${options.s}`)
         return `已经设置好欢迎语啦喵，要不要用 -t 试试看效果呀？`
       }
 
       if (options.r) {
         delete groupConfigs[session.guildId].welcomeMsg
         saveData(groupConfigPath, groupConfigs)
+        logCommand(session, 'welcome', 'remove', 'Removed welcome message')
         return `欢迎语已经被我吃掉啦喵~`
       }
 
@@ -1646,13 +1656,16 @@ welcome -t  测试当前欢迎语`
       try {
         if (options.s) {
           await session.bot.internal.setEssenceMsg(session.quote.messageId)
+          logCommand(session, 'essence', 'set', `Set message ${session.quote.messageId} as essence`)
           return '已经设置为精华消息啦喵~'
         } else if (options.r) {
           await session.bot.internal.deleteEssenceMsg(session.quote.messageId)
+          logCommand(session, 'essence', 'remove', `Removed message ${session.quote.messageId} from essence`)
           return '已经取消精华消息啦喵~'
         }
         return '请使用 -s 设置精华消息或 -r 取消精华消息'
       } catch (e) {
+        logCommand(session, 'essence', session.quote?.messageId || 'none', `Failed: ${e.message}`)
         return `出错啦喵...${e.message}`
       }
     })
@@ -1678,13 +1691,16 @@ welcome -t  测试当前欢迎语`
             return `喵呜...头衔太长啦！最多只能有 ${ctx.config.setTitle.maxLength} 个字节哦~`
           }
           await session.bot.internal.setGroupSpecialTitle(session.guildId, targetId, title)
+          logCommand(session, 'title', targetId, `Set title: ${title}`)
           return `已经设置好头衔啦喵~`
         } else if (options.r) {
           await session.bot.internal.setGroupSpecialTitle(session.guildId, targetId, '')
+          logCommand(session, 'title', targetId, 'Removed title')
           return `已经移除头衔啦喵~`
         }
         return '请使用 -s <文本> 设置头衔或 -r 移除头衔\n可选 -u @用户 为指定用户设置'
       } catch (e) {
+        logCommand(session, 'title', targetId, `Failed: ${e.message}`)
         return `出错啦喵...${e.message}`
       }
     })
@@ -1727,7 +1743,7 @@ welcome -t  测试当前欢迎语`
     messages: Array<{
       id: string
       userId: string
-      timestamp: number  // 添加这一行
+      timestamp: number
     }>
   }
 
@@ -1754,7 +1770,7 @@ welcome -t  测试当前欢迎语`
         messages: [{
           id: currentMessageId,
           userId: currentUserId,
-          timestamp: Date.now()  // 添加这一行
+          timestamp: Date.now()
         }]
       })
       return next()
@@ -1765,7 +1781,7 @@ welcome -t  测试当前欢迎语`
     record.messages.push({
       id: currentMessageId,
       userId: currentUserId,
-      timestamp: Date.now()  // 添加这一行
+      timestamp: Date.now()
     })
 
     // 检查是否超过阈值
@@ -1785,9 +1801,6 @@ welcome -t  测试当前欢迎语`
           }
           await sleep(300) // 添加短暂延迟避免频繁操作
         }
-
-        // 发送提示消息
-        await session.send('喵！检测到复读，已经清理啦~')
         
         // 重置记录
         repeatMap.delete(currentGuildId)
