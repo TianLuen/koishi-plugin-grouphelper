@@ -223,6 +223,7 @@ interface MuteRecord {
   duration: number
   remainingTime?: number
   leftGroup?: boolean
+  notified?: boolean
 }
 
 // 添加抽奖记录接口
@@ -249,6 +250,31 @@ interface LogRecord {
   result: string
 }
 
+// 添加分群复读配置存储
+interface AntiRepeatConfig {
+  enabled: boolean
+  threshold: number
+}
+
+// 添加订阅配置类型和存储
+interface LogSubscription {
+  type: 'group' | 'private'
+  id: string
+}
+
+// 扩展订阅配置类型
+interface Subscription {
+  type: 'group' | 'private'
+  id: string
+  features: {
+    log?: boolean         // 日志订阅
+    memberChange?: boolean // 进群退群通知
+    muteExpire?: boolean  // 禁言到期通知
+    blacklist?: boolean   // 黑名单变更通知
+    warning?: boolean     // 警告通知
+  }
+}
+
 export function apply(ctx: Context) {
   // 数据存储路径
   const dataPath = path.resolve(ctx.baseDir, 'data/grouphelper')
@@ -264,6 +290,18 @@ export function apply(ctx: Context) {
   // 添加日志文件路径
   const logPath = path.resolve(dataPath, 'grouphelper.log')
   const logStream = createWriteStream(logPath, { flags: 'a' })
+
+  // 读取数据函数
+  const readData = (filePath: string) => {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+    } catch {
+      return {}
+    }
+  }
+
+  const antiRepeatConfigPath = path.join(dataPath, 'antirepeat.json')
+  const antiRepeatConfigs = readData(antiRepeatConfigPath) as Record<string, AntiRepeatConfig>
 
   // 确保数据目录存在
   if (!fs.existsSync(dataPath)) {
@@ -288,15 +326,6 @@ export function apply(ctx: Context) {
   }
   if (!fs.existsSync(lockedNamesPath)) {
     fs.writeFileSync(lockedNamesPath, '{}')
-  }
-
-  // 读取数据函数
-  const readData = (filePath: string) => {
-    try {
-      return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-    } catch {
-      return {}
-    }
   }
 
   // 保存数据函数
@@ -441,22 +470,24 @@ export function apply(ctx: Context) {
   }
 
   // 修改日志记录函数
-  function logCommand(session: any, command: string, target: string, result: string) {
-    // 获取当前时间并添加8小时偏移
+  async function logCommand(session: any, command: string, target: string, result: string) {
     const date = new Date()
     date.setHours(date.getHours() + 8)
     const time = date.toISOString()
       .replace('T', ' ')
-      .replace('Z', '')  // 移除 Z 后缀，因为已经转换为北京时间
+      .replace('Z', '')
+      .slice(0, 16)
 
     const user = session.username || session.userId
     const group = session.guildId || 'private'
-    const logLine = `[${time}] [${command}] User(${user}) Group(${group}) Target(${target}): ${result}\n`
+    const logLine = `[${time}] [${command}] 用户(${user}) 群(${group}) 目标(${target}): ${result}\n`
     
     // 写入日志文件
     logStream.write(logLine)
-    // 同时保持控制台输出
     console.log(logLine.trim())
+
+    // 推送日志消息
+    await pushMessage(session.bot, logLine.trim(), 'log')
   }
 
   // 添加工具函数来处理用户ID
@@ -618,54 +649,46 @@ export function apply(ctx: Context) {
         .replace(/{group}/g, guildId)
       await session.send(msg)
     }
+    
+    // 推送成员加入通知
+    const message = `[成员加入] 用户 ${session.userId} 加入了群 ${session.guildId}`
+    await pushMessage(session.bot, message, 'memberChange')
   })
 
-  // 警告命令
+  // warn命令
   ctx.command('warn <user:user> [count:number]', '警告用户', { authority: 3 })
     .action(async ({ session }, user, count = 1) => {
-      if (!user) return '请指定用户'
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
-      
-      const warns = readData(warnsPath)
+      if (!user) return '请指定要警告的用户喵！'
+
       const userId = String(user).split(':')[1]
-      
-      // 初始化用户记录
-      warns[userId] = warns[userId] || { groups: {} }
-      
-      // 初始化群记录
-      warns[userId].groups[session.guildId] = warns[userId].groups[session.guildId] || {
-        count: 0,
-        timestamp: 0
-      }
-      
-      // 更新警告次数
-      warns[userId].groups[session.guildId].count += count
-      warns[userId].groups[session.guildId].timestamp = Date.now()
-      
+      const warns = readData(warnsPath)
+      warns[session.guildId] = warns[session.guildId] || {}
+      warns[session.guildId][userId] = (warns[session.guildId][userId] || 0) + count
+
+      const warnCount = warns[session.guildId][userId]
       saveData(warnsPath, warns)
 
-      // 获取当前警告次数
-      const warnCount = warns[userId].groups[session.guildId].count
-      
-      // 如果警告次数达到限制，执行禁言
+      // 检查是否达到自动禁言阈值
       if (warnCount >= ctx.config.warnLimit) {
+        const expression = ctx.config.banTimes.expression.replace(/{t}/g, String(warnCount))
         try {
-          // 替换表达式中的变量
-          const expression = ctx.config.banTimes.expression.replace(/\{t\}/g, warnCount.toString())
           const milliseconds = parseTimeString(expression)
           await session.bot.muteGuildMember(session.guildId, userId, milliseconds)
-          // 添加禁言记录
           recordMute(session.guildId, userId, milliseconds)
-          logCommand(session, 'warn', userId, `Success: Warned ${warnCount} times, auto-muted for ${formatDuration(milliseconds)}`)
+          await pushMessage(session.bot, `[警告] 用户 ${userId} 在群 ${session.guildId} 被警告 ${count} 次，累计 ${warnCount} 次，触发自动禁言 ${formatDuration(milliseconds)}`, 'warning')
+          logCommand(session, 'warn', userId, `已警告 ${count} 次，累计 ${warnCount} 次，触发自动禁言 ${formatDuration(milliseconds)}`)
           return `已警告用户 ${userId}\n本群警告：${warnCount} 次\n已自动禁言 ${formatDuration(milliseconds)}`
         } catch (e) {
-          logCommand(session, 'warn', userId, `Success: Warned ${warnCount} times, but auto-mute failed: ${e.message}`)
+          await pushMessage(session.bot, `[警告] 用户 ${userId} 在群 ${session.guildId} 被警告 ${count} 次，累计 ${warnCount} 次，但自动禁言失败：${e.message}`, 'warning')
+          logCommand(session, 'warn', userId, `已警告 ${count} 次，累计 ${warnCount} 次，但自动禁言失败：${e.message}`)
           return `警告已记录，但自动禁言失败：${e.message}`
         }
+      } else {
+        await pushMessage(session.bot, `[警告] 用户 ${userId} 在群 ${session.guildId} 被警告 ${count} 次，累计 ${warnCount} 次，未触发自动禁言`, 'warning')
+        logCommand(session, 'warn', userId, `已警告 ${count} 次，累计 ${warnCount} 次`)
+        return `已警告用户 ${userId}\n本群警告：${warnCount} 次`
       }
-
-      return `已警告用户 ${userId}
-本群警告：${warnCount} 次`
     })
 
   // kick命令
@@ -734,7 +757,7 @@ export function apply(ctx: Context) {
           const blacklist = readData(blacklistPath)
           blacklist[userId] = { timestamp: Date.now() }
           saveData(blacklistPath, blacklist)
-          logCommand(session, 'kick', userId, `Success: Kicked and blacklisted from group ${targetGroup}`)
+          logCommand(session, 'kick', userId, `已踢出并加入黑名单，群号：${targetGroup}`)
           return `已把坏人 ${userId} 踢出去并加入黑名单啦喵！`
         }
         
@@ -841,6 +864,21 @@ export function apply(ctx: Context) {
 禁言时长表达式：${ctx.config.banTimes.expression}
 （{t}代表警告次数）
 
+=== 复读管理 ===
+全局状态：${ctx.config.antiRepeat.enabled ? '已启用' : '未启用'}
+全局阈值：${ctx.config.antiRepeat.threshold} 条
+本群状态：${antiRepeatConfigs[session.guildId]?.enabled ? '已启用' : '未启用'}
+本群阈值：${antiRepeatConfigs[session.guildId]?.threshold || '未设置'} 条
+
+=== 精华消息 ===
+状态：${ctx.config.setEssenceMsg.enabled ? '已启用' : '未启用'}
+权限要求：${ctx.config.setEssenceMsg.authority} 级
+
+=== 头衔管理 ===
+状态：${ctx.config.setTitle.enabled ? '已启用' : '未启用'}
+权限要求：${ctx.config.setTitle.authority} 级
+最大长度：${ctx.config.setTitle.maxLength} 字节
+
 === 警告记录 ===
 ${formatWarns || '无记录'}
 
@@ -865,11 +903,13 @@ ${formatMutes || '无记录'}`
         if (options.a) {
           blacklist[options.a] = { timestamp: Date.now() }
           saveData(blacklistPath, blacklist)
+          await pushMessage(session.bot, `[黑名单] 用户 ${options.a} 已被添加到黑名单`, 'blacklist')
           return `已将 ${options.a} 加入黑名单喵~`
         }
         if (options.r) {
           delete blacklist[options.r]
           saveData(blacklistPath, blacklist)
+          await pushMessage(session.bot, `[黑名单] 用户 ${options.r} 已从黑名单移除`, 'blacklist')
           return `已将 ${options.r} 从黑名单移除啦！`
         }
         // 显示当前黑名单
@@ -1025,7 +1065,7 @@ ${formatMutes || '无记录'}`
         recordMute(targetGroup, userId, milliseconds)
         
         const timeStr = formatDuration(milliseconds)
-        logCommand(session, 'ban', userId, `Success: Muted for ${timeStr} in group ${targetGroup}`)
+        logCommand(session, 'ban', userId, `已禁言 ${timeStr}，群号：${targetGroup}`)
         return `已经把 ${userId} 禁言 ${duration} (${timeStr}) 啦喵~`
       } catch (e) {
         logCommand(session, 'ban', userId, `Failed: ${e.message}`)
@@ -1133,7 +1173,7 @@ ban-all  开启全体禁言
 unban-all  解除全体禁言
 unban-allppl  解除所有人禁言
 delmsg (回复)  撤回指定消息
-banme [次数]  随机禁言自己
+banme [次数]  随机禁言自己（权限等级1）
   · 普通抽卡：1秒~30分钟（每次使用递增上限）
   · 金卡概率：0.6%（73抽后概率提升，89抽保底）
   · UP奖励：24小时禁言
@@ -1178,6 +1218,17 @@ welcome  入群欢迎语管理：
   {at}  @新成员
   {user}  新成员QQ号
   {group}  群号
+
+=== 订阅系统 ===
+sub  订阅管理：
+  log  订阅操作日志（踢人、禁言等操作记录）
+  member  订阅成员变动通知（进群、退群）
+  mute  订阅禁言到期通知
+  blacklist  订阅黑名单变更通知
+  warning  订阅警告通知
+  all  订阅所有通知
+  none  取消所有订阅
+  status  查看订阅状态
 
 === 配置管理 ===
 config  配置管理：
@@ -1267,7 +1318,7 @@ config  配置管理：
           const newKeywords = options.a.split(',').map(k => k.trim()).filter(k => k)
           groupConfigs[session.guildId].approvalKeywords.push(...newKeywords)
           saveData(groupConfigPath, groupConfigs)
-          logCommand(session, 'groupkw', 'add', `Added keywords: ${newKeywords.join(', ')}`)
+          logCommand(session, 'groupkw', 'add', `已添加关键词：${newKeywords.join('、')}`)
           return `已经添加了关键词：${newKeywords.join('、')} 喵喵喵~`
         }
 
@@ -1283,7 +1334,7 @@ config  配置管理：
           }
           if (removed.length > 0) {
             saveData(groupConfigPath, groupConfigs)
-            logCommand(session, 'groupkw', 'remove', `Removed keywords: ${removed.join(', ')}`)
+            logCommand(session, 'groupkw', 'remove', `已移除关键词：${removed.join('、')}`)
             return `已经把关键词：${removed.join('、')} 删掉啦喵！`
           }
           return '未找到指定的关键词'
@@ -1300,7 +1351,7 @@ config  配置管理：
         const newKeywords = options.a.split(',').map(k => k.trim()).filter(k => k)
         groupConfigs[session.guildId].keywords.push(...newKeywords)
         saveData(groupConfigPath, groupConfigs)
-        logCommand(session, 'groupkw', 'add', `Added keywords: ${newKeywords.join(', ')}`)
+        logCommand(session, 'groupkw', 'add', `已添加关键词：${newKeywords.join('、')}`)
         return `已经添加了关键词：${newKeywords.join('、')} 喵喵喵~`
       }
 
@@ -1316,7 +1367,7 @@ config  配置管理：
         }
         if (removed.length > 0) {
           saveData(groupConfigPath, groupConfigs)
-          logCommand(session, 'groupkw', 'remove', `Removed keywords: ${removed.join(', ')}`)
+          logCommand(session, 'groupkw', 'remove', `已移除关键词：${removed.join('、')}`)
           return `已经把关键词：${removed.join('、')} 删掉啦喵！`
         }
         return '未找到指定的关键词'
@@ -1343,14 +1394,14 @@ config  配置管理：
       if (options.s) {
         groupConfigs[session.guildId].welcomeMsg = options.s
         saveData(groupConfigPath, groupConfigs)
-        logCommand(session, 'welcome', 'set', `Set welcome message: ${options.s}`)
+        logCommand(session, 'welcome', 'set', `已设置欢迎语：${options.s}`)
         return `已经设置好欢迎语啦喵，要不要用 -t 试试看效果呀？`
       }
 
       if (options.r) {
         delete groupConfigs[session.guildId].welcomeMsg
         saveData(groupConfigPath, groupConfigs)
-        logCommand(session, 'welcome', 'remove', 'Removed welcome message')
+        logCommand(session, 'welcome', 'remove', '已移除欢迎语')
         return `欢迎语已经被我吃掉啦喵~`
       }
 
@@ -1441,6 +1492,10 @@ welcome -t  测试当前欢迎语`
         saveData(mutesPath, mutes)
       }
     }
+    
+    // 推送成员退出通知
+    const message = `[成员退出] 用户 ${session.userId} 退出了群 ${session.guildId}`
+    await pushMessage(session.bot, message, 'memberChange')
   })
 
   // banme 命令
@@ -1656,7 +1711,7 @@ welcome -t  测试当前欢迎语`
       try {
         if (options.s) {
           await session.bot.internal.setEssenceMsg(session.quote.messageId)
-          logCommand(session, 'essence', 'set', `Set message ${session.quote.messageId} as essence`)
+          logCommand(session, 'essence', 'set', `已设置精华消息：${session.quote.messageId}`)
           return '已经设置为精华消息啦喵~'
         } else if (options.r) {
           await session.bot.internal.deleteEssenceMsg(session.quote.messageId)
@@ -1691,7 +1746,7 @@ welcome -t  测试当前欢迎语`
             return `喵呜...头衔太长啦！最多只能有 ${ctx.config.setTitle.maxLength} 个字节哦~`
           }
           await session.bot.internal.setGroupSpecialTitle(session.guildId, targetId, title)
-          logCommand(session, 'title', targetId, `Set title: ${title}`)
+          logCommand(session, 'title', targetId, `已设置头衔：${title}`)
           return `已经设置好头衔啦喵~`
         } else if (options.r) {
           await session.bot.internal.setGroupSpecialTitle(session.guildId, targetId, '')
@@ -1752,7 +1807,11 @@ welcome -t  测试当前欢迎语`
 
   // 添加消息监听器处理复读
   ctx.middleware(async (session, next) => {
-    if (!ctx.config.antiRepeat.enabled || !session.content || !session.guildId) return next()
+    if (!session.content || !session.guildId) return next()
+
+    // 检查群配置
+    const groupConfig = antiRepeatConfigs[session.guildId]
+    if (!groupConfig?.enabled) return next()
 
     const currentContent = session.content
     const currentMessageId = session.messageId
@@ -1784,12 +1843,12 @@ welcome -t  测试当前欢迎语`
       timestamp: Date.now()
     })
 
-    // 检查是否超过阈值
-    if (record.count > ctx.config.antiRepeat.threshold) {
+    // 使用群配置的阈值
+    if (record.count > groupConfig.threshold) {
       try {
         // 记录操作到日志
-        logCommand(session, 'antiRepeat', 'messages', 
-          `Deleted ${record.count - 1} repeated messages: ${currentContent}`)
+        logCommand(session, 'antirepeat', 'messages', 
+          `已删除 ${record.count - 1} 条复读消息`)
 
         // 撤回除第一条外的所有消息
         for (let i = 1; i < record.messages.length; i++) {
@@ -1797,15 +1856,15 @@ welcome -t  测试当前欢迎语`
           try {
             await session.bot.deleteMessage(session.channelId, msg.id)
           } catch (e) {
-            console.error(`Failed to delete message ${msg.id}:`, e)
+            console.error(`撤回消息 ${msg.id} 失败:`, e)
           }
-          await sleep(300) // 添加短暂延迟避免频繁操作
+          await sleep(300)
         }
         
         // 重置记录
         repeatMap.delete(currentGuildId)
       } catch (e) {
-        console.error('Error handling repeat messages:', e)
+        console.error('处理复读消息时出错:', e)
       }
     }
 
@@ -1864,6 +1923,326 @@ welcome -t  测试当前欢迎语`
         return `清理日志失败喵...${e.message}`
       }
     })
+
+  // 添加复读管理命令
+  ctx.command('antirepeat [threshold:number]', '复读管理', { authority: 3 })
+    .action(async ({ session }, threshold) => {
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+
+      // 初始化群配置
+      antiRepeatConfigs[session.guildId] = antiRepeatConfigs[session.guildId] || {
+        enabled: false,
+        threshold: ctx.config.antiRepeat.threshold
+      }
+
+      if (threshold === undefined) {
+        // 显示当前配置
+        const config = antiRepeatConfigs[session.guildId]
+        return `当前群复读配置：
+状态：${config.enabled ? '已启用' : '未启用'}
+阈值：${config.threshold} 条
+使用方法：
+antirepeat 数字 - 设置复读阈值并启用（至少3条）
+antirepeat 0 - 关闭复读检测`
+      }
+
+      if (threshold === 0) {
+        // 关闭复读检测
+        antiRepeatConfigs[session.guildId].enabled = false
+        saveData(antiRepeatConfigPath, antiRepeatConfigs)
+        logCommand(session, 'antirepeat', session.guildId, '已关闭复读检测')
+        return '已关闭本群的复读检测喵~'
+      }
+
+      if (threshold < 3) {
+        return '喵呜...阈值至少要设置为3条以上喵...'
+      }
+
+      // 更新配置
+      antiRepeatConfigs[session.guildId] = {
+        enabled: true,
+        threshold: threshold
+      }
+      saveData(antiRepeatConfigPath, antiRepeatConfigs)
+      logCommand(session, 'antirepeat', session.guildId, `已设置阈值为 ${threshold} 并启用`)
+      return `已设置本群复读阈值为 ${threshold} 条并启用检测喵~`
+    })
+
+  // 添加订阅配置类型和存储
+  const subscriptionsPath = path.join(dataPath, 'subscriptions.json')
+  let subscriptions: Subscription[] = []
+  try {
+    const data = readData(subscriptionsPath)
+    subscriptions = Array.isArray(data) ? data : []
+  } catch {
+    subscriptions = []
+  }
+
+  // 推送订阅消息的函数
+  async function pushMessage(bot: any, message: string, feature: keyof Subscription['features']) {
+    for (const sub of subscriptions) {
+      try {
+        // 确保 features 对象存在
+        if (!sub.features) {
+          sub.features = {};
+          continue; // 跳过这次迭代，因为新初始化的 features 肯定没有启用任何功能
+        }
+        
+        // 检查是否启用了特定功能
+        if (sub.features[feature]) {
+          if (sub.type === 'group') {
+            await bot.sendMessage(sub.id, message)
+          } else {
+            await bot.sendPrivateMessage(sub.id, message)
+          }
+        }
+      } catch (e) {
+        console.error(`推送消息失败: ${e.message}`)
+      }
+    }
+  }
+
+  // 添加订阅命令
+  ctx.command('sub', '订阅管理')
+    .action(async ({ session }) => {
+      return `使用以下命令管理订阅：
+sub log - 操作日志订阅
+sub member - 成员变动通知
+sub mute - 禁言到期通知
+sub blacklist - 黑名单变更通知
+sub warning - 警告通知
+sub all - 订阅所有通知
+sub none - 取消所有订阅
+sub status - 查看订阅状态`
+    })
+
+  // 为每个子命令添加独立的处理函数
+  ctx.command('sub.log', '订阅操作日志', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleSubscription(session, 'log')
+    })
+
+  ctx.command('sub.member', '订阅成员变动', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleSubscription(session, 'memberChange')
+    })
+
+  ctx.command('sub.mute', '订阅禁言到期通知', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleSubscription(session, 'muteExpire')
+    })
+
+  ctx.command('sub.blacklist', '订阅黑名单变更', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleSubscription(session, 'blacklist')
+    })
+
+  ctx.command('sub.warning', '订阅警告通知', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleSubscription(session, 'warning')
+    })
+
+  ctx.command('sub.all', '订阅所有通知', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleAllSubscriptions(session, true)
+    })
+
+  ctx.command('sub.none', '取消所有订阅', { authority: 3 })
+    .action(async ({ session }) => {
+      return handleAllSubscriptions(session, false)
+    })
+
+  ctx.command('sub.status', '查看订阅状态', { authority: 3 })
+    .action(async ({ session }) => {
+      return showSubscriptionStatus(session)
+    })
+
+  // 处理单个订阅的工具函数
+  function handleSubscription(session: any, feature: keyof Subscription['features']) {
+    if (!session) return '无法获取会话信息'
+    
+    const id = session.guildId || session.userId
+    if (!id) return '无法获取订阅ID'
+    
+    const type = session.guildId ? 'group' : 'private'
+    
+    // 查找现有订阅
+    let sub = subscriptions.find(s => s.id === id && s.type === type)
+    
+    // 初始化订阅
+    if (!sub) {
+      sub = {
+        type,
+        id,
+        features: {}
+      }
+      subscriptions.push(sub)
+    }
+    
+    // 确保 features 对象存在
+    if (!sub.features) {
+      sub.features = {}
+    }
+    
+    // 切换订阅状态
+    sub.features[feature] = !sub.features[feature]
+    saveData(subscriptionsPath, subscriptions)
+    
+    return sub.features[feature] 
+      ? `已订阅${getFeatureName(feature)}喵~` 
+      : `已取消订阅${getFeatureName(feature)}喵~`
+  }
+
+  // 处理所有订阅的工具函数
+  function handleAllSubscriptions(session: any, enabled: boolean) {
+    if (!session) return '无法获取会话信息'
+    
+    const id = session.guildId || session.userId
+    if (!id) return '无法获取订阅ID'
+    
+    const type = (session.guildId ? 'group' : 'private') as ('group' | 'private')
+    
+    // 查找现有订阅索引
+    const index = subscriptions.findIndex(s => s.id === id && s.type === type)
+    
+    if (!enabled && index >= 0) {
+      // 移除订阅
+      subscriptions.splice(index, 1)
+      saveData(subscriptionsPath, subscriptions)
+      return '已取消所有订阅喵~'
+    }
+    
+    if (enabled) {
+      // 新建或更新订阅
+      const sub: Subscription = index >= 0 ? subscriptions[index] : { 
+        type, 
+        id, 
+        features: {} 
+      }
+      
+      if (index < 0) {
+        subscriptions.push(sub)
+      }
+      
+      sub.features = {
+        log: true,
+        memberChange: true,
+        muteExpire: true,
+        blacklist: true,
+        warning: true
+      }
+      
+      saveData(subscriptionsPath, subscriptions)
+      return '已订阅所有通知喵~'
+    }
+    
+    return '无需操作喵~'
+  }
+
+  // 显示订阅状态的工具函数
+  function showSubscriptionStatus(session: any) {
+    if (!session) return '无法获取会话信息'
+    
+    const id = session.guildId || session.userId
+    if (!id) return '无法获取订阅ID'
+    
+    const type = session.guildId ? 'group' : 'private'
+    
+    // 查找现有订阅
+    const sub = subscriptions.find(s => s.id === id && s.type === type)
+    
+    if (!sub || !sub.features) {
+      return '当前没有任何订阅喵~'
+    }
+    
+    const status = [
+      `当前订阅状态：`,
+      `- 操作日志: ${sub.features.log ? '✅' : '❌'}`,
+      `- 成员变动: ${sub.features.memberChange ? '✅' : '❌'}`,
+      `- 禁言到期: ${sub.features.muteExpire ? '✅' : '❌'}`,
+      `- 黑名单变更: ${sub.features.blacklist ? '✅' : '❌'}`,
+      `- 警告通知: ${sub.features.warning ? '✅' : '❌'}`
+    ]
+    
+    return status.join('\n')
+  }
+
+  // 获取功能名称的辅助函数
+  function getFeatureName(feature: keyof Subscription['features']): string {
+    const names = {
+      log: '操作日志',
+      memberChange: '成员变动通知',
+      muteExpire: '禁言到期通知',
+      blacklist: '黑名单变更通知',
+      warning: '警告通知'
+    }
+    return names[feature] || '未知功能'
+  }
+
+  // 监听成员变动事件
+  ctx.on('guild-member-added', async (session) => {
+    // ... existing code for welcome ...
+    
+    // 推送成员加入通知
+    const message = `[成员加入] 用户 ${session.userId} 加入了群 ${session.guildId}`
+    await pushMessage(session.bot, message, 'memberChange')
+  })
+
+  ctx.on('guild-member-removed', async (session) => {
+    // ... existing code for mute tracking ...
+    
+    // 推送成员退出通知
+    const message = `[成员退出] 用户 ${session.userId} 退出了群 ${session.guildId}`
+    await pushMessage(session.bot, message, 'memberChange')
+  })
+
+  // 添加定时任务检查禁言到期
+  const checkMuteExpires = async (bot: any) => {
+    if (!bot) return;
+    
+    try {
+      const mutes = readData(mutesPath) as Record<string, Record<string, MuteRecord>>
+      const now = Date.now()
+      let hasChanges = false
+      
+      for (const groupId in mutes) {
+        for (const userId in mutes[groupId]) {
+          const muteRecord = mutes[groupId][userId]
+          if (!muteRecord) continue;
+          
+          const expireTime = muteRecord.startTime + muteRecord.duration
+          
+          if (now >= expireTime && !muteRecord.notified) {
+            mutes[groupId][userId].notified = true
+            hasChanges = true
+            
+            // 确保消息正确发送
+            const message = `[禁言到期] 用户 ${userId} 在群 ${groupId} 的禁言已到期`
+            try {
+              await pushMessage(bot, message, 'muteExpire')
+              console.log('已发送禁言到期通知:', message)
+            } catch (e) {
+              console.error('发送禁言到期通知失败:', e)
+            }
+          }
+        }
+      }
+      
+      if (hasChanges) {
+        saveData(mutesPath, mutes)
+      }
+    } catch (e) {
+      console.error('检查禁言到期失败:', e)
+    }
+  }
+
+  // 每分钟检查一次禁言到期
+  setInterval(() => {
+    const bot = ctx.bots.values().next().value
+    if (bot) {
+      checkMuteExpires(bot).catch(console.error)
+    }
+  }, 60000)
 }
 
 // 添加时间格式化函数
