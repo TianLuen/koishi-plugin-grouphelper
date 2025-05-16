@@ -64,8 +64,8 @@ welcome -t  测试当前欢迎语`
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
     .option('l', '-l 列出关键词')
     .option('p', '-p 管理入群审核关键词')
-    .option('n', '-n <自动拒绝> 设置自动拒绝')
-    .option('w', '-w <拒绝词> 设置拒绝词')
+    .option('n', '-n <自动拒绝> 设置自动拒绝，需要配合-p使用')
+    .option('w', '-w <拒绝词> 设置拒绝词，需要配合-p使用')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
@@ -110,11 +110,18 @@ welcome -t  测试当前欢迎语`
           return '未找到指定的关键词'
         }
 
-        if (options.n === 'true' || options.n === 'false') {
-          groupConfigs[session.guildId].auto = options.n
+        if (options.n !== undefined) {
+          const value = String(options.n).toLowerCase()
+          if (value === 'true' || value === '1' || value === 'yes' || value === 'y' || value === 'on') {
+            groupConfigs[session.guildId].auto = 'true'
+          } else if (value === 'false' || value === '0' || value === 'no' || value === 'n' || value === 'off') {
+            groupConfigs[session.guildId].auto = 'false'
+          } else {
+            return '无效的值，请使用 true/false、1/0、yes/no、y/n 或 on/off'
+          }
           saveData(dataService.groupConfigPath, groupConfigs)
-          dataService.logCommand(session, 'groupkw', 'auto', `已设置自动拒绝：${options.n}`)
-          return `自动拒绝状态更新为${options.n}`
+          dataService.logCommand(session, 'groupkw', 'auto', `已设置自动拒绝：${groupConfigs[session.guildId].auto}`)
+          return `自动拒绝状态更新为${groupConfigs[session.guildId].auto}`
         }
 
         if (options.w) {
