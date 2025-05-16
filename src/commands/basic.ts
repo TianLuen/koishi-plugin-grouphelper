@@ -2,6 +2,7 @@
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseUserId, parseTimeString, formatDuration, readData, saveData } from '../utils'
+import { AntiRepeatConfig } from '../types'
 
 export function registerBasicCommands(ctx: Context, dataService: DataService) {
   // kick命令
@@ -401,4 +402,48 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       return `出错啦喵...${e.message}`
     }
   })
+
+    // 添加复读管理命令
+  ctx.command('antirepeat [threshold:number]', '复读管理', { authority: 3 })
+    .action(async ({ session }, threshold) => {
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+
+      // 获取群配置
+      const config = dataService.getAntiRepeatConfig(session.guildId) || {
+        enabled: false,
+        threshold: ctx.config.antiRepeat.threshold
+      }
+
+      if (threshold === undefined) {
+        // 显示当前配置
+        return `当前群复读配置：
+状态：${config.enabled ? '已启用' : '未启用'}
+阈值：${config.threshold} 条
+使用方法：
+antirepeat 数字 - 设置复读阈值并启用（至少3条）
+antirepeat 0 - 关闭复读检测`
+      }
+
+      if (threshold === 0) {
+        // 关闭复读检测
+        dataService.saveAntiRepeatConfig(session.guildId, {
+          enabled: false,
+          threshold: config.threshold
+        })
+        dataService.logCommand(session, 'antirepeat', session.guildId, '已关闭复读检测')
+        return '已关闭本群的复读检测喵~'
+      }
+
+      if (threshold < 3) {
+        return '喵呜...阈值至少要设置为3条以上喵...'
+      }
+
+      // 更新配置
+      dataService.saveAntiRepeatConfig(session.guildId, {
+        enabled: true,
+        threshold: threshold
+      })
+      dataService.logCommand(session, 'antirepeat', session.guildId, `已设置阈值为 ${threshold} 并启用`)
+      return `已设置本群复读阈值为 ${threshold} 条并启用检测喵~`
+    })
 }

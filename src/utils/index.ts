@@ -52,12 +52,24 @@ export function parseUserId(user: string | any): string {
  * @returns 计算结果
  */
 export function evaluateExpression(expr: string): number {
+  // 安全检查：表达式长度
+  if (expr.length > 100) {
+    throw new Error('表达式过长')
+  }
+
   // 移除所有空格
   expr = expr.replace(/\s/g, '')
 
   // 安全检查：只允许数字、基本运算符、括号、sqrt和x
   if (!/^[\d+\-*/()^.esqrtx]+$/.test(expr)) {
     throw new Error(`表达式包含非法字符: ${expr}`)
+  }
+
+  // 安全检查：括号配对
+  const openBrackets = (expr.match(/\(/g) || []).length
+  const closeBrackets = (expr.match(/\)/g) || []).length
+  if (openBrackets !== closeBrackets) {
+    throw new Error('表达式括号不匹配')
   }
 
   // 替换 x 为 *
@@ -67,8 +79,18 @@ export function evaluateExpression(expr: string): number {
   expr = expr.replace(/(\d+)e(\d+)/g, (_, base, exp) =>
     String(Number(base) * Math.pow(10, Number(exp))))
 
+  // 安全检查：嵌套的sqrt调用
+  const sqrtMatches = expr.match(/sqrt/g)
+  if (sqrtMatches && sqrtMatches.length > 3) {
+    throw new Error('sqrt嵌套过多')
+  }
+
   // 替换 sqrt
+  let sqrtLoopCount = 0
   while (expr.includes('sqrt')) {
+    if (++sqrtLoopCount > 5) {
+      throw new Error('sqrt处理达到最大循环次数')
+    }
     expr = expr.replace(/sqrt\(([^()]+)\)/g, (_, num) =>
       String(Math.sqrt(calculateBasic(num))))
   }
@@ -82,39 +104,97 @@ export function evaluateExpression(expr: string): number {
  * @returns 计算结果
  */
 export function calculateBasic(expr: string): number {
+  // 添加循环计数器，防止无限循环
+  let loopCount = 0;
+  const MAX_LOOPS = 50;
+
   // 处理括号
   while (expr.includes('(')) {
+    if (++loopCount > MAX_LOOPS) {
+      throw new Error('表达式过于复杂，计算超时')
+    }
+
     expr = expr.replace(/\(([^()]+)\)/g, (_, subExpr) =>
       String(calculateBasic(subExpr)))
   }
 
   // 处理乘方
+  loopCount = 0;
   while (expr.includes('^')) {
+    if (++loopCount > MAX_LOOPS) {
+      throw new Error('表达式过于复杂，计算超时')
+    }
+
     expr = expr.replace(/(-?\d+\.?\d*)\^(-?\d+\.?\d*)/, (_, base, exp) =>
       String(Math.pow(Number(base), Number(exp))))
   }
 
   // 处理乘除
+  loopCount = 0;
   while (/[*/]/.test(expr)) {
+    if (++loopCount > MAX_LOOPS) {
+      throw new Error('表达式过于复杂，计算超时')
+    }
+
     expr = expr.replace(/(-?\d+\.?\d*)[*/](-?\d+\.?\d*)/, (match, a, b) => {
       if (match.includes('*')) return String(Number(a) * Number(b))
       return String(Number(a) / Number(b))
     })
   }
 
-  // 处理加减
-  while (/[+\-]/.test(expr) && !/^-\d/.test(expr)) {
-    expr = expr.replace(/(-?\d+\.?\d*)[+\-](-?\d+\.?\d*)/, (match, a, b) => {
-      if (match.includes('+')) return String(Number(a) + Number(b))
-      return String(Number(a) - Number(b))
-    })
+  // 如果只是单个数字（包括负数），直接返回
+  if (/^-?\d+\.?\d*$/.test(expr)) {
+    return Number(expr);
   }
 
-  const result = Number(expr)
-  if (isNaN(result)) {
-    throw new Error(`计算结果无效: ${expr}`)
+  // 使用更简单的方法处理连续的加减运算
+  // 首先将表达式分解为数字和运算符
+  const parts = [];
+  let currentNumber = '';
+  let currentIsNegative = false;
+
+  // 处理表达式第一个字符可能是负号的情况
+  for (let i = 0; i < expr.length; i++) {
+    const char = expr[i];
+    if (i === 0 && char === '-') {
+      currentIsNegative = true;
+    } else if (char === '+' || char === '-') {
+      // 当遇到运算符时，保存当前数字
+      if (currentNumber === '' && !currentIsNegative) {
+        throw new Error(`表达式格式错误：连续的运算符 ${expr}`);
+      }
+
+      parts.push(currentIsNegative ? -Number(currentNumber || '0') : Number(currentNumber || '0'));
+      parts.push(char);
+      currentNumber = '';
+      currentIsNegative = false;
+    } else if (/[\d.]/.test(char)) {
+      // 累积数字
+      currentNumber += char;
+    } else {
+      throw new Error(`表达式包含非法字符: ${char}`);
+    }
   }
-  return result
+
+  // 处理最后一个数字
+  if (currentNumber !== '') {
+    parts.push(currentIsNegative ? -Number(currentNumber) : Number(currentNumber));
+  }
+
+  // 计算结果
+  let result = parts[0];
+  for (let i = 1; i < parts.length; i += 2) {
+    const operator = parts[i];
+    const operand = parts[i + 1];
+
+    if (operator === '+') {
+      result += operand;
+    } else if (operator === '-') {
+      result -= operand;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -186,8 +266,18 @@ export function parseTimeString(timeStr: string): number {
     if (!isNaN(simpleNumber) && expr === simpleNumber.toString()) {
       value = simpleNumber
     } else {
+      // 安全检查：如果表达式过于复杂或包含太多运算符，可能导致死循环
+      const operatorCount = (expr.match(/[+\-*/^()]/g) || []).length
+      if (operatorCount > 10) {
+        throw new Error('表达式过于复杂，请简化')
+      }
+
       // 如果不是简单数字，则尝试解析表达式
-      value = evaluateExpression(expr)
+      try {
+        value = evaluateExpression(expr)
+      } catch (error) {
+        throw new Error(`表达式解析失败: ${error.message}`)
+      }
     }
 
     // 标准化单位
