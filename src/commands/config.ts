@@ -44,6 +44,7 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
         const currentGroupApprovalKeywords = session.guildId ? (groupConfigs[session.guildId]?.approvalKeywords || []) : []
         const currentGroupAuto = session.guildId ? (groupConfigs[session.guildId]?.auto || 'false') : 'false'
         const currentGroupReject = session.guildId ? (groupConfigs[session.guildId]?.reject || '答案错误，请重新申请') : '答案错误，请重新申请'
+        const currentGroupAutoDelete = session.guildId ? (groupConfigs[session.guildId]?.autoDelete || false) : false
 
         const currentWelcome = session.guildId ? (groupConfigs[session.guildId]?.welcomeMsg || '未设置') : '未设置'
 
@@ -102,6 +103,7 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
 本群关键词：${currentGroupKeywords.join('、') || '无'}
 状态：${ctx.config.keywordBan.enabled ? '已启用' : '未启用'}
 禁言时长：${ctx.config.keywordBan.duration}
+自动撤回：${currentGroupAutoDelete ? '已启用' : '未启用'}
 
 === 自动禁言配置 ===
 警告限制：${ctx.config.warnLimit} 次
