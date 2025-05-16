@@ -1,0 +1,11 @@
+// 命令模块索引文件
+export * from './basic'
+export * from './welcome'
+export * from './warn'
+export * from './help'
+export * from './repeat'
+export * from './keyword'
+export * from './config'
+export * from './banme'
+export * from './log'
+export * from './subscription'
