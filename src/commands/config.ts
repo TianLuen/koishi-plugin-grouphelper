@@ -88,6 +88,8 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
         }
         currentProb = Math.min(currentProb, 1) // 确保概率不超过100%
 
+        const banmeConfig = ctx.config.banme
+
         return `=== 入群欢迎 ===
 默认欢迎语：${safeDefaultWelcome}
 本群欢迎语：${safeWelcome}
@@ -138,6 +140,7 @@ ${formatBlacklist || '无记录'}
 当前概率：${(currentProb * 100).toFixed(2)}%
 状态：${currentBanMe.guaranteed ? '大保底' : '普通'}
 当前最大禁言：${maxDuration}
+自动禁言：${banmeConfig.autoBan ? '已启用' : '未启用'}
 
 === 当前禁言 ===
 ${formatMutes || '无记录'}`

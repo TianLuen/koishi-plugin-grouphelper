@@ -39,6 +39,8 @@ export const ConfigSchema: Schema<Config> = Schema.object({
       .description('基础最大禁言时长（分钟）'),
     growthRate: Schema.number().default(30)
       .description('递增系数（越大增长越快）'),
+    autoBan: Schema.boolean().default(false)
+      .description('是否自动禁言模糊匹配'),
     jackpot: Schema.object({
       enabled: Schema.boolean().default(true)
         .description('是否启用金卡系统'),
