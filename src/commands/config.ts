@@ -42,6 +42,8 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
 
         const currentGroupKeywords = session.guildId ? (groupConfigs[session.guildId]?.keywords || []) : []
         const currentGroupApprovalKeywords = session.guildId ? (groupConfigs[session.guildId]?.approvalKeywords || []) : []
+        const currentGroupAuto = session.guildId ? (groupConfigs[session.guildId]?.auto || 'false') : 'false'
+        const currentGroupReject = session.guildId ? (groupConfigs[session.guildId]?.reject || '答案错误，请重新申请') : '答案错误，请重新申请'
 
         const currentWelcome = session.guildId ? (groupConfigs[session.guildId]?.welcomeMsg || '未设置') : '未设置'
 
@@ -92,6 +94,8 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
 === 入群审核关键词 ===
 全局关键词：${ctx.config.keywords.join('、') || '无'}
 本群关键词：${currentGroupApprovalKeywords.join('、') || '无'}
+自动拒绝：${currentGroupAuto === 'true' ? '已启用' : '未启用'}
+拒绝词：${currentGroupReject}
 
 === 禁言关键词 ===
 全局关键词：${ctx.config.keywordBan.keywords.join('、') || '无'}

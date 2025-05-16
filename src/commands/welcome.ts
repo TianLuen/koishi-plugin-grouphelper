@@ -16,7 +16,9 @@ export function registerWelcomeCommands(ctx: Context, dataService: DataService) 
       groupConfigs[session.guildId] = groupConfigs[session.guildId] || {
         keywords: [],
         approvalKeywords: [],
-        welcomeMsg: ''
+        welcomeMsg: '',
+        auto: 'false',
+        reject: '答案错误，请重新申请'
       }
 
       if (options.s) {
@@ -62,20 +64,24 @@ welcome -t  测试当前欢迎语`
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
     .option('l', '-l 列出关键词')
     .option('p', '-p 管理入群审核关键词')
+    .option('n', '-n <自动拒绝> 设置自动拒绝')
+    .option('w', '-w <拒绝词> 设置拒绝词')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
       const groupConfigs = readData(dataService.groupConfigPath)
       groupConfigs[session.guildId] = groupConfigs[session.guildId] || {
         keywords: [],
-        approvalKeywords: []
+        approvalKeywords: [],
+        auto: 'false',
+        reject: '答案错误，请重新申请'
       }
 
       // 处理入群审核关键词
       if (options.p) {
         if (options.l) {
           const keywords = groupConfigs[session.guildId].approvalKeywords
-          return `当前群入群审核关键词：\n${keywords.join('、') || '无'}`
+          return `当前群入群审核关键词：\n${keywords.join('、') || '无'}\n自动拒绝状态：${groupConfigs[session.guildId].auto}\n拒绝词：${groupConfigs[session.guildId].reject}`
         }
 
         if (options.a) {
@@ -102,6 +108,20 @@ welcome -t  测试当前欢迎语`
             return `已经把关键词：${removed.join('、')} 删掉啦喵！`
           }
           return '未找到指定的关键词'
+        }
+
+        if (options.n === 'true' || options.n === 'false') {
+          groupConfigs[session.guildId].auto = options.n
+          saveData(dataService.groupConfigPath, groupConfigs)
+          dataService.logCommand(session, 'groupkw', 'auto', `已设置自动拒绝：${options.n}`)
+          return `自动拒绝状态更新为${options.n}`
+        }
+
+        if (options.w) {
+          groupConfigs[session.guildId].reject = options.w
+          saveData(dataService.groupConfigPath, groupConfigs)
+          dataService.logCommand(session, 'groupkw', 'set', `已设置拒绝词：${options.w}`)
+          return `拒绝词已更新为：${options.w} 喵喵喵~`
         }
       }
 
@@ -137,6 +157,6 @@ welcome -t  测试当前欢迎语`
         return '未找到指定的关键词'
       }
 
-      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n添加 -p 参数管理入群审核关键词\n多个关键词用英文逗号分隔'
+      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-p 管理入群审核关键词\n-n <true/false> 未匹配关键词自动拒绝\n-w <拒绝词> 设置拒绝时的回复\n多个关键词用英文逗号分隔'
     })
 }
