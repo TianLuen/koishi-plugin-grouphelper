@@ -1,4 +1,3 @@
-
 import * as fs from 'fs'
 import * as path from 'path'
 import { Context } from 'koishi'
@@ -94,6 +93,14 @@ export function calculateBasic(expr: string): number {
   let loopCount = 0;
   const MAX_LOOPS = 999;
 
+  // 处理连续的负号
+  expr = expr.replace(/\+-+/g, (match) => {
+    return match.length % 2 === 0 ? '+' : '-';
+  });
+
+  expr = expr.replace(/--+/g, (match) => {
+    return match.length % 2 === 0 ? '+' : '-';
+  });
 
   while (expr.includes('(')) {
     if (++loopCount > MAX_LOOPS) {
