@@ -5,6 +5,7 @@ import * as config from './config'
 
 // 导入服务
 import { DataService } from './services'
+import { AIService } from './services/ai.service'
 import { registerEventListeners, setupScheduledTasks } from './services/event.service'
 
 // 导入命令
@@ -19,7 +20,9 @@ import {
   registerConfigCommands,
   registerBanmeCommands,
   registerLogCommands,
-  registerSubscriptionCommands
+  registerSubscriptionCommands,
+  registerAICommands,
+  registerReportCommands
 } from './commands'
 
 // 导出配置
@@ -35,6 +38,9 @@ export function apply(ctx: Context) {
   // 创建数据服务
   const dataService = new DataService(ctx)
 
+  // 创建AI服务
+  const aiService = new AIService(ctx, dataService.dataPath)
+
   // 注册命令和中间件
   registerBasicCommands(ctx, dataService)
   registerWelcomeCommands(ctx, dataService)
@@ -46,6 +52,8 @@ export function apply(ctx: Context) {
   registerBanmeCommands(ctx, dataService)
   registerLogCommands(ctx, dataService)
   registerSubscriptionCommands(ctx, dataService)
+  registerAICommands(ctx, dataService, aiService)
+  registerReportCommands(ctx, dataService, aiService)
 
   // 注册事件监听器和定时任务
   registerEventListeners(ctx, dataService)
@@ -55,5 +63,6 @@ export function apply(ctx: Context) {
   // 注册资源释放钩子
   ctx.on('dispose', () => {
     dataService.dispose()
+    aiService.dispose()
   })
 }

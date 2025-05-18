@@ -52,6 +52,17 @@ declare module 'koishi' {
       enabled: boolean
       threshold: number
     }
+    openai: {
+      enabled: boolean
+      apiKey: string
+      apiUrl: string
+      maxTokens: number
+      temperature: number
+      model: string
+      systemPrompt: string
+      contextLimit: number
+      translatePrompt: string
+    }
   }
 }
 
@@ -104,6 +115,17 @@ export interface Config {
     enabled: boolean
     threshold: number
   }
+  openai: {
+    enabled: boolean
+    apiKey: string
+    apiUrl: string
+    maxTokens: number
+    temperature: number
+    model: string
+    systemPrompt: string
+    contextLimit: number
+    translatePrompt: string
+  }
 }
 
 // 群配置接口
@@ -112,6 +134,11 @@ export interface GroupConfig {
   approvalKeywords: string[]  // 群专属的入群审核关键词
   welcomeMsg?: string  // 入群欢迎语
   banme?: BanMeConfig  // 添加分群 banme 配置
+  openai?: {
+    enabled: boolean
+    systemPrompt?: string
+    translatePrompt?: string
+  }
 }
 
 // 警告记录接口
@@ -214,4 +241,44 @@ export interface RepeatRecord {
     userId: string
     timestamp: number
   }>
+}
+
+// OpenAI 相关接口
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'function'
+  content: string
+  name?: string
+}
+
+export interface ChatCompletionRequest {
+  model: string
+  messages: ChatMessage[]
+  temperature?: number
+  top_p?: number
+  max_tokens?: number
+  presence_penalty?: number
+  frequency_penalty?: number
+}
+
+export interface ChatCompletionResponse {
+  id: string
+  object: string
+  created: number
+  model: string
+  choices: {
+    index: number
+    message: ChatMessage
+    finish_reason: string
+  }[]
+  usage: {
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
+}
+
+export interface UserContext {
+  userId: string
+  messages: ChatMessage[]
+  lastTimestamp: number
 }

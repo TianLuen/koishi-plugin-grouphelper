@@ -118,6 +118,25 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
 本群状态：${dataService.getAntiRepeatConfig(session.guildId)?.enabled ? '已启用' : '未启用'}
 本群阈值：${dataService.getAntiRepeatConfig(session.guildId)?.threshold || '未设置'} 条
 
+=== 举报功能 ===
+全局状态：${ctx.config.report.enabled ? '已启用' : '未启用'}
+自动处理：${ctx.config.report.autoProcess ? '已启用' : '未启用'}
+权限要求：${ctx.config.report.authority} 级
+冷却时间：${ctx.config.report.maxReportCooldown || 60} 分钟
+本群状态：${ctx.config.report.guildConfigs?.[session.guildId]?.enabled ? '已启用' : ctx.config.report.guildConfigs?.[session.guildId]?.enabled === false ? '已禁用' : '使用全局配置'}
+本群上下文：${ctx.config.report.guildConfigs?.[session.guildId]?.includeContext ? '已启用' : '未启用'}
+上下文数量：${ctx.config.report.guildConfigs?.[session.guildId]?.contextSize || 5} 条
+
+=== AI功能 ===
+全局状态：${ctx.config.openai?.enabled ? '已启用' : '未启用'}
+对话功能：${ctx.config.openai?.chatEnabled ? '已启用' : '未启用'}
+翻译功能：${ctx.config.openai?.translateEnabled ? '已启用' : '未启用'}
+使用模型：${ctx.config.openai?.model || 'gpt-3.5-turbo'}
+API地址：${ctx.config.openai?.apiUrl || 'https://api.openai.com/v1'}
+本群状态：${groupConfigs[session.guildId]?.openai?.enabled === undefined ? '跟随全局' : groupConfigs[session.guildId]?.openai?.enabled ? '已启用' : '已禁用'}
+本群对话：${groupConfigs[session.guildId]?.openai?.chatEnabled === undefined ? '跟随全局' : groupConfigs[session.guildId]?.openai?.chatEnabled ? '已启用' : '已禁用'}
+本群翻译：${groupConfigs[session.guildId]?.openai?.translateEnabled === undefined ? '跟随全局' : groupConfigs[session.guildId]?.openai?.translateEnabled ? '已启用' : '已禁用'}
+
 === 精华消息 ===
 状态：${ctx.config.setEssenceMsg.enabled ? '已启用' : '未启用'}
 权限要求：${ctx.config.setEssenceMsg.authority} 级

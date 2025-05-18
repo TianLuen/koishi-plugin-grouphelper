@@ -13,7 +13,7 @@ export function registerWarnCommands(ctx: Context, dataService: DataService) {
       const userId = String(user).split(':')[1]
       const warns = readData(dataService.warnsPath)
       warns[session.guildId] = warns[session.guildId] || {}
-      warns[session.guildId][userId] = (warns[session.guildId][userId] || 0) + count
+      warns[session.guildId][userId] = Number(warns[session.guildId][userId] || 0) + Number(count)
 
       const warnCount = warns[session.guildId][userId]
       saveData(dataService.warnsPath, warns)

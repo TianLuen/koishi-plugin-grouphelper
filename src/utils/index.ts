@@ -1,6 +1,7 @@
 // 工具函数模块
 import * as fs from 'fs'
 import * as path from 'path'
+import { Context } from 'koishi'
 
 // 定义时间限制常量（毫秒）
 export const MIN_DURATION = 1000 // 1秒
@@ -266,12 +267,6 @@ export function parseTimeString(timeStr: string): number {
     if (!isNaN(simpleNumber) && expr === simpleNumber.toString()) {
       value = simpleNumber
     } else {
-      // 安全检查：如果表达式过于复杂或包含太多运算符，可能导致死循环
-      const operatorCount = (expr.match(/[+\-*/^()]/g) || []).length
-      if (operatorCount > 10) {
-        throw new Error('表达式过于复杂，请简化')
-      }
-
       // 如果不是简单数字，则尝试解析表达式
       try {
         value = evaluateExpression(expr)
@@ -334,6 +329,39 @@ export function formatDuration(milliseconds: number): string {
   if (seconds % 60 > 0) parts.push(`${seconds % 60}秒`)
 
   return parts.join('')
+}
+
+/**
+ * 执行命令的通用函数
+ * @param ctx Koishi上下文
+ * @param session 会话对象
+ * @param commandName 命令名称
+ * @param args 命令参数
+ * @param options 命令选项
+ * @returns 命令执行结果
+ */
+export async function executeCommand(
+  ctx: Context,
+  session: any,
+  commandName: string,
+  args: string[] = [],
+  options: Record<string, any> = {}
+) {
+  try {
+    const command = ctx.$commander.get(commandName, session)
+    if (!command) {
+      throw new Error(`命令 ${commandName} 不存在`)
+    }
+    const result = await command.execute({
+      session,
+      args,
+      options
+    })
+    return result
+  } catch (error) {
+    console.error(`执行命令 ${commandName} 失败:`, error)
+    throw error
+  }
 }
 
 /**
