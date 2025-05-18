@@ -11,7 +11,7 @@ export enum ViolationLevel {
   CRITICAL = 4,
 }
 
-// 违规信息
+
 interface ViolationInfo {
   level: ViolationLevel;
   reason: string;
@@ -19,7 +19,7 @@ interface ViolationInfo {
   duration?: string;
 }
 
-// 举报限制记录
+
 interface ReportBanRecord {
   userId: string;
   guildId: string;
@@ -27,7 +27,7 @@ interface ReportBanRecord {
   expireTime: number;
 }
 
-// 群上下文
+
 interface MessageRecord {
   userId: string;
   content: string;
@@ -35,45 +35,45 @@ interface MessageRecord {
 }
 
 export function registerReportCommands(ctx: Context, dataService: DataService, aiService: AIService) {
-  // 存储举报限制记录
+
   const reportBans: Record<string, ReportBanRecord> = {};
 
-  // 存储各群聊近期消息记录
+
   const guildMessages: Record<string, MessageRecord[]> = {};
 
-  // 存储已举报的消息ID
+
   const reportedMessages: Record<string, {
     messageId: string,
     timestamp: number,
     result: string
   }> = {};
 
-  // 获取举报冷却时间
+
   const getReportCooldownDuration = () => {
     return (ctx.config.report.maxReportCooldown || 60) * 60 * 1000;
   };
 
-  // 获取最低不受限制的权限等级
+
   const getMinUnlimitedAuthority = () => {
     return ctx.config.report.minAuthorityNoLimit || 2;
   };
 
-  // 获取可举报的最长时间（分钟）
+
   const getMaxReportTime = () => {
-    return ctx.config.report.maxReportTime || 30; // 默认30分钟
+    return ctx.config.report.maxReportTime || 30;
   };
 
-  // 获取默认提示词
+
   const getDefaultPrompt = () => {
     return ctx.config.report.defaultPrompt || defaultReportPrompt;
   };
 
-  // 获取上下文提示词
+
   const getContextPrompt = () => {
     return ctx.config.report.contextPrompt || contextReportPrompt;
   };
 
-  // 配置默认的违规判断提示词
+
   const defaultReportPrompt = `你是一个群组内容安全审查助手，负责严格遵循中国大陆法律法规和互联网内容管理规范。你的任务是判断用户发送的消息是否违规，并根据违规程度进行分类。请分析以下消息内容：
 
 {content}
@@ -112,7 +112,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
 
 对于轻微违规，请始终在action字段中使用"禁言"关键词并指定时长，例如"禁言 30m"。`
 
-  // 带上下文的评审提示词
+
     const contextReportPrompt = `你是一个群组内容安全审查助手，负责严格遵循中国大陆法律法规和互联网内容管理规范。你的任务是判断用户发送的消息是否违规，并根据违规程度进行分类。
 
   请先查看以下群聊的上下文消息：
@@ -215,7 +215,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
         console.error('获取用户权限失败:', e);
       }
 
-      // 最低不受限制的权限等级
+
       const minUnlimitedAuthority = getMinUnlimitedAuthority();
 
       if (userAuthority < minUnlimitedAuthority) {
@@ -235,7 +235,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
       try {
         const quoteId = typeof session.quote === 'string' ? session.quote : session.quote.id
 
-        // 检查消息是否已被举报
+
         const messageReportKey = `${session.guildId}:${quoteId}`;
         if (reportedMessages[messageReportKey]) {
           return `该消息已被举报过，处理结果: ${reportedMessages[messageReportKey].result}`;
@@ -280,11 +280,11 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           `举报内容: ${reportedMessage.content}`
         )
 
-        // 检查消息时间（如果消息中有时间戳）
+
         if (userAuthority < getMinUnlimitedAuthority()) {
           let messageTimestamp = 0;
 
-          // 尝试从消息中获取时间戳，使用通用方式避免类型错误
+
           if (reportedMessage.timestamp) {
             messageTimestamp = reportedMessage.timestamp;
           } else if (typeof reportedMessage['time'] === 'number') {
@@ -300,10 +300,10 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
             }
           }
 
-          // 如果获取到时间戳，检查是否超过时间限制
+
           if (messageTimestamp > 0) {
             const now = Date.now();
-            const maxReportTimeMs = getMaxReportTime() * 60 * 1000; // 转换为毫秒
+            const maxReportTimeMs = getMaxReportTime() * 60 * 1000;
 
             if (now - messageTimestamp > maxReportTimeMs) {
               return `只能举报${getMaxReportTime()}分钟内的消息，此消息已超时。`;
@@ -333,7 +333,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
         }
         const response = await aiService.callModeration(promptWithContent)
 
-        // 解析响应
+
         let violationInfo: ViolationInfo
         try {
           if (response.startsWith('{') && response.endsWith('}')) {
@@ -364,7 +364,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
               expireTime: Date.now() + getReportCooldownDuration()
             };
 
-            // 记录举报失败和限制
+
             await dataService.logCommand(
               session,
               'report-banned',
@@ -386,7 +386,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           guildConfig
         )
 
-        // 记录已处理的举报消息
+
         reportedMessages[messageReportKey] = {
           messageId: quoteId,
           timestamp: Date.now(),
@@ -395,7 +395,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
             '未违规'
         };
 
-        // 如果未判定为违规，对低权限用户添加举报限制
+
         if (violationInfo.level === ViolationLevel.NONE && userAuthority < minUnlimitedAuthority) {
           const banKey = `${session.userId}:${session.guildId}`;
           reportBans[banKey] = {
@@ -457,15 +457,15 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
 
       const isGuildSpecific = !!options.guild || !!session.guildId;
 
-      // 修改配置
+
       let hasChanges = false;
       let configMsg = [];
 
       if (isGuildSpecific) {
-        // 修改群特定配置
+
         configMsg.push(`群 ${guildId} 的举报功能配置：`);
 
-        // 初始化群配置
+
         if (!ctx.config.report.guildConfigs) {
           ctx.config.report.guildConfigs = {};
         }
@@ -554,12 +554,12 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
     verbose = false,
     guildConfig = null
   ): Promise<string> {
-    // 确保session对象有基本属性
+
     if (!session.user) {
-      session.user = { authority: 5 }; // 使用管理员权限
+      session.user = { authority: 5 };
     }
 
-    // 未违规
+
     if (violation.level === ViolationLevel.NONE) {
       return verbose
         ? `AI判断结果：该消息未违规\n理由：${violation.reason}`
@@ -571,7 +571,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
     const guildId = session.guildId
 
     try {
-      // 检查是否启用自动处理功能
+
       const shouldAutoProcess = guildConfig
         ? guildConfig.autoProcess
         : ctx.config.report?.autoProcess;
@@ -581,7 +581,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           ? `AI判断结果：${getViolationLevelText(violation.level)}违规\n理由：${violation.reason}\n操作：自动处理功能已禁用，请管理员手动处理`
           : `该消息被判定为${getViolationLevelText(violation.level)}违规，请管理员手动处理。`
 
-        // 记录违规但不执行操作
+
         await dataService.logCommand(
           session,
           'report-no-action',
@@ -591,10 +591,10 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
         return result;
       }
 
-      // 根据违规等级处理
+
       switch(violation.level) {
         case ViolationLevel.LOW:
-          // 检查是否包含"禁言"关键词
+
           if (violation.action.includes('禁言')) {
             let duration = '10m'
             const durationMatch = violation.action.match(/(\d+[smhd])/i)
@@ -607,7 +607,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
               ? `AI判断结果：轻微违规\n理由：${violation.reason}\n操作：已禁言该用户 ${duration}`
               : `已禁言用户 ${userId} ${duration}，轻微违规。`
           } else {
-            // 如果不包含禁言关键词，则执行警告
+
             await warnUser(ctx, session, userId)
             result = verbose
               ? `AI判断结果：轻微违规\n理由：${violation.reason}\n操作：已警告该用户`
@@ -616,7 +616,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           break
 
         case ViolationLevel.MEDIUM:
-          // 中度违规统一使用警告处理
+
           await warnUser(ctx, session, userId)
           result = verbose
             ? `AI判断结果：中度违规\n理由：${violation.reason}\n操作：已警告该用户`
@@ -624,7 +624,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           break
 
         case ViolationLevel.HIGH:
-          // 严重违规改为警告5次
+
           await warnUser(ctx, session, userId, 5)
           result = verbose
             ? `AI判断结果：严重违规\n理由：${violation.reason}\n操作：已警告该用户5次`
@@ -658,7 +658,7 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
     } catch (e) {
       console.error('执行违规处理失败:', e)
 
-      // 记录举报处理错误日志
+
       try {
         const errorResult = `${getViolationLevelText(violation.level)}违规处理失败: ${e.message.substring(0, 50)}`
         await dataService.logCommand(session, 'report-error', userId, errorResult)
@@ -702,12 +702,12 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
       const banInput = `${userId} ${duration}`
       const result = await executeCommand(ctx, session, 'ban', [banInput], {}, true)
 
-      // 检查返回结果是否表明操作失败
+
       if (!result || typeof result === 'string' && result.includes('失败')) {
         throw new Error(`禁言执行失败: ${result || '未知错误'}`)
       }
 
-      // 记录更详细的日志
+
       console.log(`禁言执行结果: ${JSON.stringify(result)}`)
     } catch (e) {
       console.error(`禁言用户失败: ${e.message}`)
@@ -720,12 +720,12 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
       const kickInput = addToBlacklist ? `${userId} -b` : userId
       const result = await executeCommand(ctx, session, 'kick', [kickInput], {}, true)
 
-      // 检查返回结果是否表明操作失败
+
       if (!result || typeof result === 'string' && result.includes('失败')) {
         throw new Error(`踢出执行失败: ${result || '未知错误'}`)
       }
 
-      // 记录更详细的日志
+
       console.log(`踢出执行结果: ${JSON.stringify(result)}`)
     } catch (e) {
       console.error(`踢出用户失败: ${e.message}`)
@@ -733,21 +733,21 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
     }
   }
 
-  // 清除过期的举报限制的定时任务
+
   ctx.setInterval(() => {
     const now = Date.now();
-    // 清理举报限制
+
     for (const key in reportBans) {
       if (reportBans[key].expireTime <= now) {
         delete reportBans[key];
       }
     }
 
-    // 清理已举报消息记录(24小时后)
+
     for (const key in reportedMessages) {
       if (now - reportedMessages[key].timestamp > 24 * 60 * 60 * 1000) {
         delete reportedMessages[key];
       }
     }
-  }, 10 * 60 * 1000); // 每10分钟执行一次清理
+  }, 10 * 60 * 1000);
 }
