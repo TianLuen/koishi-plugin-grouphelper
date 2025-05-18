@@ -41,6 +41,13 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
   // 存储各群聊近期消息记录
   const guildMessages: Record<string, MessageRecord[]> = {};
 
+  // 存储已举报的消息ID
+  const reportedMessages: Record<string, {
+    messageId: string,
+    timestamp: number,
+    result: string
+  }> = {};
+
   // 获取举报冷却时间
   const getReportCooldownDuration = () => {
     return (ctx.config.report.maxReportCooldown || 60) * 60 * 1000;
@@ -176,6 +183,12 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
       try {
         const quoteId = typeof session.quote === 'string' ? session.quote : session.quote.id
 
+        // 检查消息是否已被举报
+        const messageReportKey = `${session.guildId}:${quoteId}`;
+        if (reportedMessages[messageReportKey]) {
+          return `该消息已被举报过，处理结果: ${reportedMessages[messageReportKey].result}`;
+        }
+
         const reportedMessage = await session.bot.getMessage(session.guildId, quoteId)
 
         if (!reportedMessage || !reportedMessage.content) {
@@ -289,6 +302,15 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
           options.verbose,
           guildConfig
         )
+
+        // 记录已处理的举报消息
+        reportedMessages[messageReportKey] = {
+          messageId: quoteId,
+          timestamp: Date.now(),
+          result: violationInfo.level > ViolationLevel.NONE ?
+            `已处理(${getViolationLevelText(violationInfo.level)}违规)` :
+            '未违规'
+        };
 
         // 如果未判定为违规，对低权限用户添加举报限制
         if (violationInfo.level === ViolationLevel.NONE && userAuthority < minUnlimitedAuthority) {
@@ -592,9 +614,17 @@ export function registerReportCommands(ctx: Context, dataService: DataService, a
   // 清除过期的举报限制的定时任务
   ctx.setInterval(() => {
     const now = Date.now();
+    // 清理举报限制
     for (const key in reportBans) {
       if (reportBans[key].expireTime <= now) {
         delete reportBans[key];
+      }
+    }
+
+    // 清理已举报消息记录(24小时后)
+    for (const key in reportedMessages) {
+      if (now - reportedMessages[key].timestamp > 24 * 60 * 60 * 1000) {
+        delete reportedMessages[key];
       }
     }
   }, 10 * 60 * 1000); // 每10分钟执行一次清理

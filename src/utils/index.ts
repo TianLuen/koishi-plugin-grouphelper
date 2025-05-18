@@ -149,12 +149,24 @@ export function calculateBasic(expr: string): number {
 
   for (let i = 0; i < expr.length; i++) {
     const char = expr[i];
+    const nextChar = expr[i + 1];
+
     if (i === 0 && char === '-') {
       currentIsNegative = true;
     } else if (char === '+' || char === '-') {
-
-      if (currentNumber === '' && !currentIsNegative) {
-        throw new Error(`表达式格式错误：连续的运算符 ${expr}`);
+      if (char === '-' && i > 0 && (expr[i-1] === '+' || expr[i-1] === '-' || expr[i-1] === '*' || expr[i-1] === '/' || expr[i-1] === '^')) {
+        currentIsNegative = true;
+        continue;
+      }
+      if (char === '+' && nextChar === '-') {
+        if (currentNumber !== '' || currentIsNegative) {
+          parts.push(currentIsNegative ? -Number(currentNumber || '0') : Number(currentNumber || '0'));
+        }
+        parts.push(char);
+        currentNumber = '';
+        currentIsNegative = true;
+        i++;
+        continue;
       }
 
       parts.push(currentIsNegative ? -Number(currentNumber || '0') : Number(currentNumber || '0'));
@@ -162,7 +174,6 @@ export function calculateBasic(expr: string): number {
       currentNumber = '';
       currentIsNegative = false;
     } else if (/[\d.]/.test(char)) {
-
       currentNumber += char;
     } else {
       throw new Error(`表达式包含非法字符: ${char}`);
