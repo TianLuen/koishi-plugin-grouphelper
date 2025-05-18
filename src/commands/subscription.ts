@@ -1,10 +1,9 @@
-// 订阅命令模块
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { Subscription } from '../types'
 
 export function registerSubscriptionCommands(ctx: Context, dataService: DataService) {
-  // 添加订阅命令
+
   ctx.command('sub', '订阅管理')
     .action(async ({ session }) => {
       return `使用以下命令管理订阅：
@@ -18,7 +17,7 @@ sub none - 取消所有订阅
 sub status - 查看订阅状态`
     })
 
-  // 为每个子命令添加独立的处理函数
+
   ctx.command('sub.log', '订阅操作日志', { authority: 3 })
     .action(async ({ session }) => {
       return handleSubscription(session, 'log')
@@ -59,7 +58,7 @@ sub status - 查看订阅状态`
       return showSubscriptionStatus(session)
     })
 
-  // 处理单个订阅的工具函数
+
   function handleSubscription(session: any, feature: keyof Subscription['features']) {
     if (!session) return '无法获取会话信息'
 
@@ -68,10 +67,10 @@ sub status - 查看订阅状态`
 
     const type = session.guildId ? 'group' : 'private'
 
-    // 查找现有订阅
+
     let sub = dataService.subscriptions.find(s => s.id === id && s.type === type)
 
-    // 初始化订阅
+
     if (!sub) {
       sub = {
         type,
@@ -81,12 +80,12 @@ sub status - 查看订阅状态`
       dataService.subscriptions.push(sub)
     }
 
-    // 确保 features 对象存在
+
     if (!sub.features) {
       sub.features = {}
     }
 
-    // 切换订阅状态
+
     sub.features[feature] = !sub.features[feature]
     dataService.saveSubscriptions()
 
@@ -95,7 +94,7 @@ sub status - 查看订阅状态`
       : `已取消订阅${dataService.getFeatureName(feature)}喵~`
   }
 
-  // 处理所有订阅的工具函数
+
   function handleAllSubscriptions(session: any, enabled: boolean) {
     if (!session) return '无法获取会话信息'
 
@@ -104,18 +103,18 @@ sub status - 查看订阅状态`
 
     const type = (session.guildId ? 'group' : 'private') as ('group' | 'private')
 
-    // 查找现有订阅索引
+
     const index = dataService.subscriptions.findIndex(s => s.id === id && s.type === type)
 
     if (!enabled && index >= 0) {
-      // 移除订阅
+
       dataService.subscriptions.splice(index, 1)
       dataService.saveSubscriptions()
       return '已取消所有订阅喵~'
     }
 
     if (enabled) {
-      // 新建或更新订阅
+
       const sub: Subscription = index >= 0 ? dataService.subscriptions[index] : {
         type,
         id,
@@ -141,7 +140,7 @@ sub status - 查看订阅状态`
     return '无需操作喵~'
   }
 
-  // 显示订阅状态的工具函数
+
   function showSubscriptionStatus(session: any) {
     if (!session) return '无法获取会话信息'
 
@@ -150,7 +149,7 @@ sub status - 查看订阅状态`
 
     const type = session.guildId ? 'group' : 'private'
 
-    // 查找现有订阅
+
     const sub = dataService.subscriptions.find(s => s.id === id && s.type === type)
 
     if (!sub || !sub.features) {
@@ -169,11 +168,11 @@ sub status - 查看订阅状态`
     return status.join('\n')
   }
 
-  // 添加定时任务检查禁言到期
+
   setInterval(() => {
     const bot = ctx.bots.values().next().value
     if (bot) {
       dataService.checkMuteExpires(bot).catch(console.error)
     }
-  }, 60000) // 每分钟检查一次
+  }, 60000)
 }

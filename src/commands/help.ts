@@ -1,10 +1,10 @@
-// 帮助命令模块
+
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseTimeString, formatDuration } from '../utils'
 
 export function registerHelpCommands(ctx: Context, dataService: DataService) {
-  // grouphelper命令 - 帮助信息
+
   ctx.command('grouphelper', '群管理帮助', { authority: 3 })
     .action(async ({ session }) => {
       return `=== 基础命令 ===
@@ -138,7 +138,7 @@ config  配置管理：
 注：大部分命令需要权限等级 3 或以上`
     })
 
-  // 添加时间解析测试命令
+
   ctx.command('parse-time <expression:text>', '测试时间解析', { authority: 1 })
     .example('parse-time 10m')
     .example('parse-time 1h30m')

@@ -1,4 +1,4 @@
-// 数据服务模块
+
 import * as fs from 'fs'
 import * as path from 'path'
 import { Context } from 'koishi'
@@ -12,7 +12,7 @@ import {
 } from '../types'
 
 export class DataService {
-  // 数据存储路径
+
   dataPath: string
   warnsPath: string
   blacklistPath: string
@@ -24,15 +24,15 @@ export class DataService {
   antiRepeatConfigPath: string
   subscriptionsPath: string
 
-  // 日志流
+
   logStream: fs.WriteStream
 
-  // 数据缓存
+
   antiRepeatConfigs: Record<string, AntiRepeatConfig>
   subscriptions: Subscription[]
 
   constructor(ctx: Context) {
-    // 初始化路径
+
     this.dataPath = path.resolve(ctx.baseDir, 'data/grouphelper')
     this.warnsPath = path.resolve(this.dataPath, 'warns.json')
     this.blacklistPath = path.resolve(this.dataPath, 'blacklist.json')
@@ -44,7 +44,7 @@ export class DataService {
     this.antiRepeatConfigPath = path.join(this.dataPath, 'antirepeat.json')
     this.subscriptionsPath = path.join(this.dataPath, 'subscriptions.json')
 
-    // 初始化
+
     this.init()
   }
 
@@ -52,12 +52,12 @@ export class DataService {
    * 初始化数据服务
    */
   private init() {
-    // 确保数据目录存在
+
     if (!fs.existsSync(this.dataPath)) {
       fs.mkdirSync(this.dataPath, { recursive: true })
     }
 
-    // 初始化数据文件
+
     if (!fs.existsSync(this.warnsPath)) {
       fs.writeFileSync(this.warnsPath, '{}')
     }
@@ -77,13 +77,13 @@ export class DataService {
       fs.writeFileSync(this.lockedNamesPath, '{}')
     }
 
-    // 创建日志流
+
     this.logStream = createWriteStream(this.logPath, { flags: 'a' })
 
-    // 加载复读配置
+
     this.antiRepeatConfigs = readData(this.antiRepeatConfigPath) as Record<string, AntiRepeatConfig>
 
-    // 加载订阅配置
+
     try {
       const data = readData(this.subscriptionsPath)
       this.subscriptions = Array.isArray(data) ? data : []
@@ -130,11 +130,11 @@ export class DataService {
     const group = session.guildId || 'private'
     const logLine = `[${time}] [${command}] 用户(${user}) 群(${group}) 目标(${target}): ${result}\n`
 
-    // 写入日志文件
+
     this.logStream.write(logLine)
     console.log(logLine.trim())
 
-    // 推送日志消息
+
     await this.pushMessage(session.bot, logLine.trim(), 'log')
   }
 
@@ -175,13 +175,13 @@ export class DataService {
   async pushMessage(bot: any, message: string, feature: keyof Subscription['features']) {
     for (const sub of this.subscriptions) {
       try {
-        // 确保 features 对象存在
+
         if (!sub.features) {
           sub.features = {};
-          continue; // 跳过这次迭代，因为新初始化的 features 肯定没有启用任何功能
+          continue;
         }
 
-        // 检查是否启用了特定功能
+
         if (sub.features[feature]) {
           if (sub.type === 'group') {
             await bot.sendMessage(sub.id, message)
@@ -241,7 +241,7 @@ export class DataService {
             mutes[groupId][userId].notified = true
             hasChanges = true
 
-            // 确保消息正确发送
+
             const message = `[禁言到期] 用户 ${userId} 在群 ${groupId} 的禁言已到期`
             try {
               await this.pushMessage(bot, message, 'muteExpire')

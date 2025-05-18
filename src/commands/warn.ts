@@ -1,10 +1,10 @@
-// 警告命令模块
+
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseTimeString, formatDuration, readData, saveData } from '../utils'
 
 export function registerWarnCommands(ctx: Context, dataService: DataService) {
-  // warn命令
+
   ctx.command('warn <user:user> [count:number]', '警告用户', { authority: 3 })
     .action(async ({ session }, user, count = 1) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
@@ -18,7 +18,7 @@ export function registerWarnCommands(ctx: Context, dataService: DataService) {
       const warnCount = warns[session.guildId][userId]
       saveData(dataService.warnsPath, warns)
 
-      // 检查是否达到自动禁言阈值
+
       if (warnCount >= ctx.config.warnLimit) {
         const expression = ctx.config.banTimes.expression.replace(/{t}/g, String(warnCount))
         try {

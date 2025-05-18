@@ -10,8 +10,8 @@ export function registerLogCommands(ctx: Context, dataService: DataService) {
     }
 
     try {
-      // 读取日志文件的最后N行
-      const maxBuffer = 1024 * 1024 // 1MB buffer
+
+      const maxBuffer = 1024 * 1024
       const content = fs.readFileSync(dataService.logPath, 'utf8')
       const allLines = content.split('\n').filter(line => line.trim())
       const recentLines = allLines.slice(-lines)
@@ -20,14 +20,14 @@ export function registerLogCommands(ctx: Context, dataService: DataService) {
         return '还没有任何日志记录喵~'
       }
 
-      // 格式化输出
+
       return `=== 最近 ${Math.min(lines, recentLines.length)} 条操作记录 ===\n${recentLines.join('\n')}`
     } catch (e) {
       return `读取日志失败喵...${e.message}`
     }
   })
 
-  ctx.command('clearlog', '清理日志文件', { authority: 4 })  // 使用更高的权限等级
+  ctx.command('clearlog', '清理日志文件', { authority: 4 })
   .option('d', '-d <days:number> 保留最近几天的日志')
   .option('a', '-a 清理所有日志')
   .action(async ({ session, options }) => {
@@ -37,18 +37,18 @@ export function registerLogCommands(ctx: Context, dataService: DataService) {
 
     try {
       if (options.a) {
-        // 清空日志文件
+
         fs.writeFileSync(dataService.logPath, '')
         dataService.logCommand(session, 'clearlog', 'all', 'Cleared all logs')
         return '已清理所有日志记录喵~'
       }
 
-      const days = options.d || 7  // 默认保留7天
+      const days = options.d || 7
       const now = Date.now()
       const content = fs.readFileSync(dataService.logPath, 'utf8')
       const allLines = content.split('\n').filter(line => line.trim())
 
-      // 解析每行日志的时间并筛选
+
       const keptLogs = allLines.filter(line => {
         const match = line.match(/^\[(.*?)\]/)
         if (!match) return false
@@ -57,7 +57,7 @@ export function registerLogCommands(ctx: Context, dataService: DataService) {
         return (now - logTime) <= days * 24 * 60 * 60 * 1000
       })
 
-      // 写入保留的日志
+
       fs.writeFileSync(dataService.logPath, keptLogs.join('\n') + '\n')
 
       const deletedCount = allLines.length - keptLogs.length

@@ -1,11 +1,11 @@
-// 配置管理命令模块
+
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { readData, saveData, formatDuration } from '../utils'
 import { WarnRecord, BlacklistRecord, MuteRecord } from '../types'
 
 export function registerConfigCommands(ctx: Context, dataService: DataService) {
-  // config命令
+
   ctx.command('config', '配置管理', { authority: 3 })
     .option('t', '-t 显示所有记录')
     .option('b', '-b 黑名单管理')
@@ -18,7 +18,7 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
         const blacklist = readData(dataService.blacklistPath)
         const groupConfigs = readData(dataService.groupConfigPath)
 
-        // 清理警告次数为0的记录，添加安全检查
+
         for (const userId in warns) {
           if (warns[userId]?.groups?.[session.guildId]?.count <= 0) {
             delete warns[userId]
@@ -70,23 +70,23 @@ export function registerConfigCommands(ctx: Context, dataService: DataService) {
           guaranteed: false
         }
 
-        // 检查是否需要重置计数（1小时）
+
         if (Date.now() - currentBanMe.lastResetTime > 3600000) {
           currentBanMe.count = 0
         }
 
-        // 计算当前最大禁言时长
+
         const baseMaxMillis = ctx.config.banme.baseMax * 60 * 1000
         const additionalMinutes = Math.floor(Math.pow(currentBanMe.count, 1/3) * ctx.config.banme.growthRate)
         const maxDuration = formatDuration(baseMaxMillis + (additionalMinutes * 60 * 1000))
 
-        // 计算当前概率
+
         let currentProb = ctx.config.banme.jackpot.baseProb
         if (currentBanMe.pity >= ctx.config.banme.jackpot.softPity) {
           currentProb = ctx.config.banme.jackpot.baseProb +
             (currentBanMe.pity - ctx.config.banme.jackpot.softPity + 1) * 0.06
         }
-        currentProb = Math.min(currentProb, 1) // 确保概率不超过100%
+        currentProb = Math.min(currentProb, 1)
 
         const banmeConfig = ctx.config.banme
 
@@ -165,7 +165,7 @@ ${formatBlacklist || '无记录'}
 ${formatMutes || '无记录'}`
       }
 
-      // 黑名单管理
+
       if (options.b) {
         const blacklist = readData(dataService.blacklistPath)
         if (options.a) {
@@ -180,14 +180,14 @@ ${formatMutes || '无记录'}`
           await dataService.pushMessage(session.bot, `[黑名单] 用户 ${options.r} 已从黑名单移除`, 'blacklist')
           return `已将 ${options.r} 从黑名单移除啦！`
         }
-        // 显示当前黑名单
+
         const formatBlacklist = Object.entries(blacklist).map(([userId, data]: [string, BlacklistRecord]) =>
           `用户 ${userId}：${new Date(data.timestamp).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`
         ).join('\n')
         return `=== 当前黑名单 ===\n${formatBlacklist || '无记录'}`
       }
 
-      // 警告管理
+
       if (options.w) {
         const warns = readData(dataService.warnsPath)
         if (options.a) {
@@ -222,7 +222,7 @@ ${formatMutes || '无记录'}`
           }
           return '未找到该用户的警告记录'
         }
-        // 显示当前警告记录
+
         if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
         const formatWarns = Object.entries(warns)
@@ -237,7 +237,7 @@ ${formatMutes || '无记录'}`
         return `=== 当前群警告记录 ===\n${formatWarns || '无记录'}`
       }
 
-      // 如果没有指定操作，显示帮助信息
+
       return `请使用以下参数：
 -t 显示所有配置和记录
 -b [-a/-r {QQ号}] 黑名单管理

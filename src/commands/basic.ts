@@ -1,11 +1,11 @@
-// 基础管理命令模块
+
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseUserId, parseTimeString, formatDuration, readData, saveData } from '../utils'
 import { AntiRepeatConfig } from '../types'
 
 export function registerBasicCommands(ctx: Context, dataService: DataService) {
-  // kick命令
+
   ctx.command('kick <input:text>', '踢出用户', { authority: 3 })
     .example('kick @用户')
     .example('kick 123456789')
@@ -14,16 +14,16 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
     .example('kick 123456789 -b 群号')
     .option('black', '-b 加入黑名单')
     .action(async ({ session, options }, input) => {
-      // 检查是否包含 -b 选项
+
       const hasBlackOption = input.includes('-b')
-      // 移除 -b 选项并规范化空格
+
       input = input.replace(/-b/g, '').replace(/\s+/g, ' ').trim()
 
       console.log('Normalized input:', input, 'Black option:', hasBlackOption)
 
       let args: string[]
       if (input.includes('<at')) {
-        // 如果包含 at，使用特殊处理
+
         const atMatch = input.match(/<at[^>]+>/)
         if (atMatch) {
           const atPart = atMatch[0]
@@ -33,24 +33,24 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
           args = input.split(' ')
         }
       } else {
-        // 普通分割
+
         args = input.split(' ')
       }
 
       const [target, groupId] = args
       console.log('Split params:', { target, groupId, hasBlackOption })
 
-      // 尝试解析为 user 对象
+
       let userId: string
       try {
-        // 如果是 @ 格式
+
         if (target?.startsWith('<at')) {
           const match = target.match(/id="(\d+)"/)
           if (match) {
             userId = match[1]
           }
         } else {
-          // 如果是普通字符串（QQ号）
+
           userId = parseUserId(target)
         }
       } catch (e) {
@@ -83,16 +83,16 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // ban命令
+
   ctx.command('ban <input:text>', '禁言用户', { authority: 3 })
     .example('ban @用户 1h')
     .example('ban 123456789 1h')
     .example('ban @用户 1h 群号')
     .action(async ({ session }, input) => {
-      // 先处理 at 格式
+
       let args: string[]
       if (input.includes('<at')) {
-        // 如果包含 at，使用特殊处理
+
         const atMatch = input.match(/<at[^>]+>/)
         if (atMatch) {
           const atPart = atMatch[0]
@@ -102,7 +102,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
           args = input.split(/\s+/)
         }
       } else {
-        // 普通分割
+
         args = input.split(/\s+/)
       }
 
@@ -114,17 +114,17 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       const [target, duration, groupId] = args
       console.log('Split params:', { target, duration, groupId })
 
-      // 尝试解析为 user 对象
+
       let userId: string
       try {
-        // 如果是 @ 格式
+
         if (target.startsWith('<at')) {
           const match = target.match(/id="(\d+)"/)
           if (match) {
             userId = match[1]
           }
         } else {
-          // 如果是普通字符串（QQ号）
+
           userId = parseUserId(target)
         }
       } catch (e) {
@@ -157,16 +157,16 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // unban命令
+
   ctx.command('unban <input:text>', '解除用户禁言', { authority: 3 })
     .example('unban @用户')
     .example('unban 123456789')
     .example('unban @用户 群号')
     .action(async ({ session }, input) => {
-      // 先处理 at 格式
+
       let args: string[]
       if (input.includes('<at')) {
-        // 如果包含 at，使用特殊处理
+
         const atMatch = input.match(/<at[^>]+>/)
         if (atMatch) {
           const atPart = atMatch[0]
@@ -176,24 +176,24 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
           args = input.split(/\s+/)
         }
       } else {
-        // 普通分割
+
         args = input.split(/\s+/)
       }
 
       const [target, groupId] = args
       console.log('Split params:', { target, groupId })
 
-      // 尝试解析为 user 对象
+
       let userId: string
       try {
-        // 如果是 @ 格式
+
         if (target.startsWith('<at')) {
           const match = target.match(/id="(\d+)"/)
           if (match) {
             userId = match[1]
           }
         } else {
-          // 如果是普通字符串（QQ号）
+
           userId = parseUserId(target)
         }
       } catch (e) {
@@ -217,7 +217,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // ban-all命令
+
   ctx.command('ban-all', '全体禁言', { authority: 3 })
     .action(async ({ session }) => {
       try {
@@ -230,7 +230,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // unban-all命令
+
   ctx.command('unban-all', '解除全体禁言', { authority: 3 })
     .action(async ({ session }) => {
       try {
@@ -243,7 +243,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // delmsg命令
+
   ctx.command('delmsg', '撤回消息', { authority: 3 })
     .action(async ({ session }) => {
       if (!session.quote) return '喵喵！请回复要撤回的消息呀~'
@@ -256,7 +256,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // admin命令 - 设置管理员
+
   ctx.command('admin <user:user>', '设置管理员', { authority: 4 })
     .example('admin @用户')
     .action(async ({ session }, user) => {
@@ -274,7 +274,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // unadmin命令 - 取消管理员
+
   ctx.command('unadmin <user:user>', '取消管理员', { authority: 4 })
     .example('unadmin @用户')
     .action(async ({ session }, user) => {
@@ -292,48 +292,48 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // unban-allppl命令
+
   ctx.command('unban-allppl', '解除所有人禁言', { authority: 3 })
     .action(async ({ session }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵~'
 
       try {
-        // 读取当前禁言记录
+
         const mutes = readData(dataService.mutesPath)
         const currentMutes = mutes[session.guildId] || {}
         const now = Date.now()
 
-        // 解除所有人的禁言
+
         let count = 0
         for (const userId in currentMutes) {
           if (!currentMutes[userId].leftGroup) {
             try {
-              // 检查记录中的禁言是否已经结束
+
               const muteEndTime = currentMutes[userId].startTime + currentMutes[userId].duration
               if (now >= muteEndTime) {
-                // 如果禁言已经结束，直接删除记录
+
                 delete currentMutes[userId]
                 continue
               }
 
-              // 检查用户是否真的处于禁言状态
+
               const memberInfo = await session.bot.internal.getGroupMemberInfo(session.guildId, userId, false)
               if (memberInfo.shut_up_timestamp > 0) {
                 await session.bot.muteGuildMember(session.guildId, userId, 0)
                 delete currentMutes[userId]
                 count++
               } else {
-                // 如果用户实际上没有被禁言，直接删除记录
+
                 delete currentMutes[userId]
               }
             } catch (e) {
-              // 忽略单个用户解除失败的情况，继续处理其他用户
+
               console.error(`解除用户 ${userId} 禁言失败:`, e)
             }
           }
         }
 
-        // 保存更新后的记录
+
         mutes[session.guildId] = currentMutes
         saveData(dataService.mutesPath, mutes)
 
@@ -377,7 +377,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-      // 添加精华消息命令
+
   ctx.command('essence', '精华消息管理', { authority: ctx.config.setEssenceMsg.authority })
   .option('s', '-s 设置精华消息')
   .option('r', '-r 取消精华消息')
@@ -403,19 +403,19 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
     }
   })
 
-    // 添加复读管理命令
+
   ctx.command('antirepeat [threshold:number]', '复读管理', { authority: 3 })
     .action(async ({ session }, threshold) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
-      // 获取群配置
+
       const config = dataService.getAntiRepeatConfig(session.guildId) || {
         enabled: false,
         threshold: ctx.config.antiRepeat.threshold
       }
 
       if (threshold === undefined) {
-        // 显示当前配置
+
         return `当前群复读配置：
 状态：${config.enabled ? '已启用' : '未启用'}
 阈值：${config.threshold} 条
@@ -425,7 +425,7 @@ antirepeat 0 - 关闭复读检测`
       }
 
       if (threshold === 0) {
-        // 关闭复读检测
+
         dataService.saveAntiRepeatConfig(session.guildId, {
           enabled: false,
           threshold: config.threshold
@@ -438,7 +438,7 @@ antirepeat 0 - 关闭复读检测`
         return '喵呜...阈值至少要设置为3条以上喵...'
       }
 
-      // 更新配置
+
       dataService.saveAntiRepeatConfig(session.guildId, {
         enabled: true,
         threshold: threshold

@@ -2,7 +2,7 @@ import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseTimeString, formatDuration, readData, saveData } from '../utils'
 
-// 添加字符标准化函数
+
 function normalizeCommand(command: string): string {
   // 移除所有类型的空白字符
   command = command.replace(/[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]/g, '')
@@ -24,7 +24,7 @@ function normalizeCommand(command: string): string {
 
   // 替换相似字符
   const similarChars: { [key: string]: string } = {
-    // 拉丁字母变体
+
     'α': 'a', 'а': 'a', 'Α': 'a', 'А': 'a', 'ɒ': 'a', 'ɐ': 'a', '𝐚': 'a', '𝐀': 'a', '₳': 'a','ₐ': 'a', 'ₔ': 'a', 'ₕ': 'a', '₠': 'a', '𝓪': 'a', '4': 'a',
     'е': 'e', 'Е': 'e', 'ε': 'e', 'Ε': 'e', 'ë': 'e', 'Ë': 'e', '𝐞': 'e', '𝐄': 'e', 'ə': 'e', 'Э': 'e', 'э': 'e', '𝓮': 'e',
     'м': 'm', 'М': 'm', '𝐦': 'm', '𝐌': 'm', 'rn': 'm', 'ₘ': 'm', '₞': 'm', '₥': 'm', '₩': 'm', '₼': 'm', 'ɱ': 'm', '𝓶': 'm',
@@ -54,29 +54,29 @@ function normalizeCommand(command: string): string {
 }
 
 export function registerBanmeCommands(ctx: Context, dataService: DataService) {
-  // 添加消息中间件来处理命令变体
+
   ctx.middleware(async (session, next) => {
     if (!session.content || !session.guildId) return next()
 
     const normalizedContent = normalizeCommand(session.content)
     if (normalizedContent === 'banme') {
-      // 如果是变体命令
+
       if (session.content !== 'banme') {
         dataService.logCommand(session, 'banme', session.userId, `Suspicious: ${session.content}`)
 
-        // 读取群配置
+
         const groupConfigs = readData(dataService.groupConfigPath)
         const groupConfig = groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
         const banmeConfig = groupConfig.banme || ctx.config.banme
 
-        // 如果启用了自动禁言
+
         if (banmeConfig.autoBan) {
           try {
-            // 读取并更新调用记录
+
             const records = readData(dataService.banMeRecordsPath)
             const now = Date.now()
 
-            // 初始化群记录
+
             if (!records[session.guildId]) {
               records[session.guildId] = {
                 count: 0,
@@ -86,7 +86,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
               }
             }
 
-            // 检查是否需要重置计数（1小时）
+
             if (now - records[session.guildId].lastResetTime > 3600000) {
               records[session.guildId].count = 0
               records[session.guildId].lastResetTime = now
@@ -95,7 +95,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
             records[session.guildId].count++
             records[session.guildId].pity++
 
-            // 使用群配置的概率和保底机制
+
             let isJackpot = false
             let isGuaranteed = false
 
@@ -122,7 +122,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
 
             saveData(dataService.banMeRecordsPath, records)
 
-            // 计算禁言时长
+
             let milliseconds
             if (isJackpot && banmeConfig.jackpot.enabled) {
               if (records[session.guildId].guaranteed) {
@@ -164,23 +164,23 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
           }
         }
       }
-      // 修改消息内容为标准命令
+
       session.content = 'banme'
     }
     return next()
   })
 
-  // banme 命令
+
   ctx.command('banme', '随机禁言自己', { authority: 1 })
     .action(async ({ session }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       if (session.quote) return '喵喵？回复消息时不能使用这个命令哦~'
 
-      // 读取群配置
+
       const groupConfigs = readData(dataService.groupConfigPath)
       const groupConfig = groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
 
-      // 使用群配置，如果没有则使用全局配置
+
       const banmeConfig = groupConfig.banme || ctx.config.banme
 
       if (!banmeConfig.enabled) {
@@ -189,11 +189,11 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       }
 
       try {
-        // 读取并更新调用记录
+
         const records = readData(dataService.banMeRecordsPath)
         const now = Date.now()
 
-        // 初始化群记录
+
         if (!records[session.guildId]) {
           records[session.guildId] = {
             count: 0,
@@ -203,7 +203,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
           }
         }
 
-        // 检查是否需要重置计数（1小时）
+
         if (now - records[session.guildId].lastResetTime > 3600000) {
           records[session.guildId].count = 0
           records[session.guildId].lastResetTime = now
@@ -212,7 +212,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         records[session.guildId].count++
         records[session.guildId].pity++
 
-        // 使用群配置的概率和保底机制
+
         let isJackpot = false
         let isGuaranteed = false
 
@@ -239,7 +239,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
 
         saveData(dataService.banMeRecordsPath, records)
 
-        // 计算禁言时长，使用群配置
+
         let milliseconds
         if (isJackpot && banmeConfig.jackpot.enabled) {
           if (records[session.guildId].guaranteed) {
@@ -282,7 +282,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       }
     })
 
-  // 添加设置群 banme 配置的命令
+
   ctx.command('banme-config', '设置banme配置', { authority: 3 })
     .option('enabled', '-e <enabled:boolean> 是否启用')
     .option('baseMin', '-min <seconds:number> 最小禁言时间(秒)')
@@ -307,11 +307,11 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         return '已重置为全局配置喵~'
       }
 
-      // 初始化或获取现有配置
+
       let banmeConfig = groupConfigs[session.guildId].banme || { ...ctx.config.banme }
       banmeConfig.jackpot = banmeConfig.jackpot || { ...ctx.config.banme.jackpot }
 
-      // 更新配置
+
       if (options.enabled !== undefined) banmeConfig.enabled = options.enabled
       if (options.baseMin) banmeConfig.baseMin = options.baseMin
       if (options.baseMax) banmeConfig.baseMax = options.baseMax

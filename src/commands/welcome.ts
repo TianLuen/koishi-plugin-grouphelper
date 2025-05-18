@@ -1,10 +1,10 @@
-// 欢迎语和关键词管理命令
+
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { readData, saveData } from '../utils'
 
 export function registerWelcomeCommands(ctx: Context, dataService: DataService) {
-  // 添加欢迎语管理命令
+
   ctx.command('welcome', '入群欢迎语管理', { authority: 3 })
     .option('s', '-s <消息> 设置欢迎语')
     .option('r', '-r 移除欢迎语')
@@ -58,7 +58,7 @@ welcome -r  移除欢迎语
 welcome -t  测试当前欢迎语`
     })
 
-  // 添加群关键词管理命令
+
   ctx.command('groupkw', '群关键词管理', { authority: 3 })
     .option('a', '-a <关键词> 添加关键词，多个关键词用英文逗号分隔')
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
@@ -77,7 +77,7 @@ welcome -t  测试当前欢迎语`
         reject: '答案错误，请重新申请'
       }
 
-      // 处理入群审核关键词
+
       if (options.p) {
         if (options.l) {
           const keywords = groupConfigs[session.guildId].approvalKeywords
@@ -132,7 +132,7 @@ welcome -t  测试当前欢迎语`
         }
       }
 
-      // 原有的禁言关键词管理逻辑
+
       if (options.l) {
         const keywords = groupConfigs[session.guildId].keywords
         return `当前群禁言关键词：\n${keywords.join('、') || '无'}`
