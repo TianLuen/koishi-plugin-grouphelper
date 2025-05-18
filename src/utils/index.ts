@@ -54,10 +54,6 @@ export function parseUserId(user: string | any): string {
  */
 export function evaluateExpression(expr: string): number {
 
-  if (expr.length > 100) {
-    throw new Error('表达式过长')
-  }
-
 
   expr = expr.replace(/\s/g, '')
 
@@ -80,18 +76,7 @@ export function evaluateExpression(expr: string): number {
   expr = expr.replace(/(\d+)e(\d+)/g, (_, base, exp) =>
     String(Number(base) * Math.pow(10, Number(exp))))
 
-
-  const sqrtMatches = expr.match(/sqrt/g)
-  if (sqrtMatches && sqrtMatches.length > 3) {
-    throw new Error('sqrt嵌套过多')
-  }
-
-
-  let sqrtLoopCount = 0
   while (expr.includes('sqrt')) {
-    if (++sqrtLoopCount > 5) {
-      throw new Error('sqrt处理达到最大循环次数')
-    }
     expr = expr.replace(/sqrt\(([^()]+)\)/g, (_, num) =>
       String(Math.sqrt(calculateBasic(num))))
   }
@@ -107,7 +92,7 @@ export function evaluateExpression(expr: string): number {
 export function calculateBasic(expr: string): number {
 
   let loopCount = 0;
-  const MAX_LOOPS = 50;
+  const MAX_LOOPS = 999;
 
 
   while (expr.includes('(')) {
