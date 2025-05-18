@@ -30,6 +30,7 @@ export const name = config.name
 export const usage = config.usage
 export const Config = config.ConfigSchema
 
+export const inject = ['database']
 
 export { Config as ConfigInterface } from './types'
 
