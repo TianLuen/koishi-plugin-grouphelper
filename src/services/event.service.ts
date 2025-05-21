@@ -1,5 +1,4 @@
-
-import { Context } from 'koishi'
+import { Context, Time } from 'koishi'
 import { DataService } from './data.service'
 import { readData, saveData, formatDuration } from '../utils'
 
@@ -68,33 +67,45 @@ export function registerEventListeners(ctx: Context, dataService: DataService) {
     const { userId, guildId } = session
     const { _data: data } = session.event
 
-
+    // 检查黑名单
     const blacklist = readData(dataService.blacklistPath)
     if (blacklist[userId]) {
       await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, false, '您在黑名单中')
       return
     }
 
+    // 检查退群冷却
+    const leaveRecords = readData(dataService.leaveRecordsPath)
+    const record = leaveRecords[`${guildId}_${userId}`]
+    if (record && Date.now() < record.expireTime) {
+      await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, false, '退群后需要等待冷却时间才能重新加入')
+      return
+    }
 
+    // 检查等级限制
     const groupConfigs = readData(dataService.groupConfigPath)
-    const groupConfig = groupConfigs[guildId] || { keywords: [], approvalKeywords: [] }
+    const groupConfig = groupConfigs[guildId] || { keywords: [], approvalKeywords: [], levelLimit: 0 }
 
+    if (groupConfig.levelLimit > 0) {
+      const userInfo = await session.bot.internal.getStrangerInfo(userId, true)
+      if (userInfo.level < groupConfig.levelLimit) {
+        await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, false, `等级不足${groupConfig.levelLimit}级`)
+        return
+      }
+    }
 
+    // 检查关键词
     const keywords = [...ctx.config.keywords, ...groupConfig.approvalKeywords]
-
-
     if (keywords.length > 0 && data.comment) {
       const comment = data.comment.toLowerCase()
       for (const keyword of keywords) {
         try {
-
           const regex = new RegExp(keyword, 'i')
           if (regex.test(data.comment)) {
             await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, true)
             return
           }
         } catch (e) {
-
           if (data.comment.toLowerCase().includes(keyword.toLowerCase())) {
             await session.bot.internal.setGroupAddRequest(data.flag, data.sub_type, true)
             return
@@ -102,7 +113,6 @@ export function registerEventListeners(ctx: Context, dataService: DataService) {
         }
       }
     }
-
 
     return
   })
@@ -159,6 +169,19 @@ export function registerEventListeners(ctx: Context, dataService: DataService) {
   ctx.on('guild-member-removed', async (session) => {
     const { guildId, userId } = session
 
+    // 设置退群冷却
+    const groupConfigs = readData(dataService.groupConfigPath)
+    const groupConfig = groupConfigs[guildId] || { keywords: [], approvalKeywords: [], leaveCooldown: 0 }
+
+    if (groupConfig.leaveCooldown > 0) {
+      const leaveRecords = readData(dataService.leaveRecordsPath)
+      leaveRecords[`${guildId}_${userId}`] = {
+        expireTime: Date.now() + groupConfig.leaveCooldown * Time.day
+      }
+      saveData(dataService.leaveRecordsPath, leaveRecords)
+    }
+
+    // 处理禁言记录
     const mutes = readData(dataService.mutesPath)
     if (mutes[guildId]?.[userId]) {
       const muteRecord = mutes[guildId][userId]
@@ -169,12 +192,10 @@ export function registerEventListeners(ctx: Context, dataService: DataService) {
         muteRecord.leftGroup = true
         saveData(dataService.mutesPath, mutes)
       } else {
-
         delete mutes[guildId][userId]
         saveData(dataService.mutesPath, mutes)
       }
     }
-
 
     const message = `[成员退出] 用户 ${session.userId} 退出了群 ${session.guildId}`
     await dataService.pushMessage(session.bot, message, 'memberChange')

@@ -1,4 +1,3 @@
-
 import * as fs from 'fs'
 import * as path from 'path'
 import { Context } from 'koishi'
@@ -23,10 +22,9 @@ export class DataService {
   logPath: string
   antiRepeatConfigPath: string
   subscriptionsPath: string
-
+  leaveRecordsPath: string
 
   logStream: fs.WriteStream
-
 
   antiRepeatConfigs: Record<string, AntiRepeatConfig>
   subscriptions: Subscription[]
@@ -43,7 +41,7 @@ export class DataService {
     this.logPath = path.resolve(this.dataPath, 'grouphelper.log')
     this.antiRepeatConfigPath = path.join(this.dataPath, 'antirepeat.json')
     this.subscriptionsPath = path.join(this.dataPath, 'subscriptions.json')
-
+    this.leaveRecordsPath = path.resolve(this.dataPath, 'leave_records.json')
 
     this.init()
   }

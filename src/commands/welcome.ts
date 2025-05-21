@@ -1,4 +1,3 @@
-
 import { Context } from 'koishi'
 import { DataService } from '../services'
 import { readData, saveData } from '../utils'
@@ -9,6 +8,8 @@ export function registerWelcomeCommands(ctx: Context, dataService: DataService) 
     .option('s', '-s <消息> 设置欢迎语')
     .option('r', '-r 移除欢迎语')
     .option('t', '-t 测试当前欢迎语')
+    .option('l', '-l <等级> 设置等级限制')
+    .option('j', '-j <天数> 设置退群冷却天数')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
@@ -18,7 +19,31 @@ export function registerWelcomeCommands(ctx: Context, dataService: DataService) 
         approvalKeywords: [],
         welcomeMsg: '',
         auto: 'false',
-        reject: '答案错误，请重新申请'
+        reject: '答案错误，请重新申请',
+        levelLimit: 0,  // 等级限制
+        leaveCooldown: 0  // 退群冷却天数
+      }
+
+      if (options.l !== undefined) {
+        const level = parseInt(options.l)
+        if (isNaN(level) || level < 0) {
+          return '等级限制必须是非负整数喵~'
+        }
+        groupConfigs[session.guildId].levelLimit = level
+        saveData(dataService.groupConfigPath, groupConfigs)
+        dataService.logCommand(session, 'welcome', 'set', `已设置等级限制：${level}级`)
+        return `已经设置好等级限制为${level}级啦喵~`
+      }
+
+      if (options.j !== undefined) {
+        const days = parseInt(options.j)
+        if (isNaN(days) || days < 0) {
+          return '冷却天数必须是非负整数喵~'
+        }
+        groupConfigs[session.guildId].leaveCooldown = days
+        saveData(dataService.groupConfigPath, groupConfigs)
+        dataService.logCommand(session, 'welcome', 'set', `已设置退群冷却：${days}天`)
+        return `已经设置好退群冷却为${days}天啦喵~`
       }
 
       if (options.s) {
@@ -47,7 +72,14 @@ export function registerWelcomeCommands(ctx: Context, dataService: DataService) 
       }
 
       const currentMsg = groupConfigs[session.guildId].welcomeMsg
-      return `当前欢迎语：${currentMsg || '未设置'}\n\n可用变量：
+      const currentLevelLimit = groupConfigs[session.guildId].levelLimit || 0
+      const currentLeaveCooldown = groupConfigs[session.guildId].leaveCooldown || 0
+
+      return `当前欢迎语：${currentMsg || '未设置'}
+当前等级限制：${currentLevelLimit}级
+当前退群冷却：${currentLeaveCooldown}天
+
+可用变量：
 {at} - @新成员
 {user} - 新成员QQ号
 {group} - 群号
@@ -55,7 +87,9 @@ export function registerWelcomeCommands(ctx: Context, dataService: DataService) 
 使用方法：
 welcome -s <欢迎语>  设置欢迎语
 welcome -r  移除欢迎语
-welcome -t  测试当前欢迎语`
+welcome -t  测试当前欢迎语
+welcome -l <等级>  设置等级限制（0表示不限制）
+welcome -j <天数>  设置退群冷却天数（0表示不限制）`
     })
 
 
