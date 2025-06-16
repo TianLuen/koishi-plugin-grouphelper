@@ -242,6 +242,8 @@ ${formatMutes || '无记录'}`
 -t 显示所有配置和记录
 -b [-a/-r {QQ号}] 黑名单管理
 -w [-a/-r {QQ号} {次数}] 警告管理
-使用 groupkw 命令管理群关键词`
+使用 verify 命令管理入群审核关键词
+使用 forbidden 命令管理禁言关键词
+使用 antirepeat 命令管理复读功能`
     })
 }

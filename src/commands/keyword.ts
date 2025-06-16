@@ -82,6 +82,7 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
     .option('l', '-l 列出关键词')
     .option('d', '-d <true/false> 设置是否自动撤回包含关键词的消息')
+    .option('t', '-t <时间> 设置自动禁言时间')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
@@ -139,7 +140,20 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         return `自动撤回状态更新为${groupConfigs[session.guildId].autoDelete}`
       }
 
-      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n多个关键词用英文逗号分隔'
+      if (options.t) {
+        const duration = options.t
+        try {
+          const milliseconds = parseTimeString(duration)
+          groupConfigs[session.guildId].muteDuration = milliseconds
+          saveData(dataService.groupConfigPath, groupConfigs)
+          dataService.logCommand(session, 'forbidden', 'set', `已设置禁言时间：${duration}`)
+          return `禁言时间已更新为：${duration} 喵喵喵~`
+        } catch (e) {
+          return `无效的时间格式：${duration}，请使用类似 "1h" 或 "30m" 的格式`
+        }
+      }
+
+      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n-t <时间> 设置自动禁言时长\n多个关键词用英文逗号分隔'
     })
 }
 
@@ -173,7 +187,7 @@ export function registerKeywordMiddleware(ctx: Context, dataService: DataService
               await session.bot.muteGuildMember(session.guildId, session.userId, milliseconds)
 
               dataService.recordMute(session.guildId, session.userId, milliseconds)
-              await session.send(`喵呜！发现了关键词"${keyword}"，要被禁言 ${duration} 啦...`)
+              await session.send(`喵呜！发现了关键词，要被禁言 ${duration} 啦...`)
             } catch (e) {
               await session.send('自动禁言失败了...可能是权限不够喵')
             }
@@ -187,7 +201,7 @@ export function registerKeywordMiddleware(ctx: Context, dataService: DataService
               await session.bot.muteGuildMember(session.guildId, session.userId, milliseconds)
 
               dataService.recordMute(session.guildId, session.userId, milliseconds)
-              await session.send(`喵呜！发现了关键词"${keyword}"，要被禁言 ${duration} 啦...`)
+              await session.send(`喵呜！发现了关键词，要被禁言 ${duration} 啦...`)
             } catch (e) {
               await session.send('自动禁言失败了...可能是权限不够喵')
             }
@@ -205,7 +219,7 @@ export function registerKeywordMiddleware(ctx: Context, dataService: DataService
           if (regex.test(content)) {
             try {
               await session.bot.deleteMessage(session.guildId, session.messageId)
-              await session.send(`喵呜！发现了关键词"${keyword}"，消息已被撤回...`)
+              await session.send(`喵呜！发现了关键词，消息已被撤回...`)
             } catch (e) {
               await session.send('自动撤回失败了...可能是权限不够喵')
             }
@@ -215,7 +229,7 @@ export function registerKeywordMiddleware(ctx: Context, dataService: DataService
           if (content.includes(keyword)) {
             try {
               await session.bot.deleteMessage(session.guildId, session.messageId)
-              await session.send(`喵呜！发现了关键词"${keyword}"，消息已被撤回...`)
+              await session.send(`喵呜！发现了关键词，消息已被撤回...`)
             } catch (e) {
               await session.send('自动撤回失败了...可能是权限不够喵')
             }
