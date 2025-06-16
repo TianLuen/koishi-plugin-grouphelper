@@ -16,6 +16,7 @@ import {
   registerHelpCommands,
   registerRepeatMiddleware,
   registerKeywordMiddleware,
+  registerKeywordCommands,
   setupRepeatCleanupTask,
   registerConfigCommands,
   registerBanmeCommands,
@@ -48,6 +49,7 @@ export function apply(ctx: Context) {
   registerWarnCommands(ctx, dataService)
   registerHelpCommands(ctx, dataService)
   registerKeywordMiddleware(ctx, dataService)
+  registerKeywordCommands(ctx, dataService)
   registerRepeatMiddleware(ctx, dataService)
   registerConfigCommands(ctx, dataService)
   registerBanmeCommands(ctx, dataService)
