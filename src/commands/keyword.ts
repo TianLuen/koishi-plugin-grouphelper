@@ -7,6 +7,7 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
   ctx.command('verify', '入群验证关键词管理', { authority: 3 })
     .option('a', '-a <关键词> 添加关键词，多个关键词用英文逗号分隔')
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
+    .option('clear', '--clear 清除所有关键词')
     .option('l', '-l 列出关键词')
     .option('n', '-n <true/false> 设置未匹配关键词时是否自动拒绝')
     .option('w', '-w <拒绝词> 设置拒绝时的回复')
@@ -53,6 +54,16 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         return '未找到指定的关键词'
       }
 
+      if (options.clear) {
+        if (!groupConfigs[session.guildId].approvalKeywords.length) {
+          return '当前没有任何入群审核关键词喵~'
+        }
+        groupConfigs[session.guildId].approvalKeywords = []
+        saveData(dataService.groupConfigPath, groupConfigs)
+        dataService.logCommand(session, 'verify', 'clear', `已清除所有关键词`)
+        return '所有入群审核关键词已清除喵~'
+      } 
+
       if (options.n !== undefined) {
         const value = String(options.n).toLowerCase()
         if (value === 'true' || value === '1' || value === 'yes' || value === 'y' || value === 'on') {
@@ -74,12 +85,13 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         return `拒绝词已更新为：${options.w} 喵喵喵~`
       }
 
-      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-n <true/false> 未匹配关键词自动拒绝\n-w <拒绝词> 设置拒绝时的回复\n多个关键词用英文逗号分隔'
+      return '请使用：\n-a 添加关键词\n-r 移除关键词\n--clear 清空关键词\n-l 列出关键词\n-n <true/false> 未匹配关键词自动拒绝\n-w <拒绝词> 设置拒绝时的回复\n多个关键词用英文逗号分隔'
     })
 
   ctx.command('forbidden', '禁言关键词管理', { authority: 3 })
     .option('a', '-a <关键词> 添加关键词，多个关键词用英文逗号分隔')
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
+    .option('clear', '--clear 清除所有关键词')
     .option('l', '-l 列出关键词')
     .option('d', '-d <true/false> 设置是否自动撤回包含关键词的消息')
     .option('t', '-t <时长> 设置自动禁言时长')
@@ -126,6 +138,16 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         return '未找到指定的关键词'
       }
 
+      if(options.clear) {
+        if (!groupConfigs[session.guildId].keywords.length) {
+          return '当前没有任何禁言关键词喵~'
+        }
+        groupConfigs[session.guildId].keywords = []
+        saveData(dataService.groupConfigPath, groupConfigs)
+        dataService.logCommand(session, 'forbidden', 'clear', `已清除所有关键词`)
+        return '所有禁言关键词已清除喵~' 
+      }
+
       if (options.d !== undefined) {
         const value = String(options.d).toLowerCase()
         if (value === 'true' || value === '1' || value === 'yes' || value === 'y' || value === 'on') {
@@ -153,7 +175,7 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         }
       }
 
-      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n-t <时长> 设置自动禁言时长\n多个关键词用英文逗号分隔'
+      return '请使用：\n-a 添加关键词\n-r 移除关键词\n--clear 清空关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n-t <时长> 设置自动禁言时长\n多个关键词用英文逗号分隔'
     })
 }
 
