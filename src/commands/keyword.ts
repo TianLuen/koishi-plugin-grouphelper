@@ -82,7 +82,7 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
     .option('r', '-r <关键词> 移除关键词，多个关键词用英文逗号分隔')
     .option('l', '-l 列出关键词')
     .option('d', '-d <true/false> 设置是否自动撤回包含关键词的消息')
-    .option('t', '-t <时间> 设置自动禁言时间')
+    .option('t', '-t <时长> 设置自动禁言时长')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
@@ -153,7 +153,7 @@ export function registerKeywordCommands(ctx: Context, dataService: DataService) 
         }
       }
 
-      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n-t <时间> 设置自动禁言时长\n多个关键词用英文逗号分隔'
+      return '请使用：\n-a 添加关键词\n-r 移除关键词\n-l 列出关键词\n-d <true/false> 设置是否自动撤回包含关键词的消息\n-t <时长> 设置自动禁言时长\n多个关键词用英文逗号分隔'
     })
 }
 

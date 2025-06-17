@@ -250,7 +250,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
 
       try {
         await session.bot.deleteMessage(session.channelId, session.quote.id)
-        return '消息已经被我吃掉啦喵~'
+        return ''
       } catch (e) {
         return '呜呜...撤回失败了，可能太久了或者没有权限喵...'
       }
