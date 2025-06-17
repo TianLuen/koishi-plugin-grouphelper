@@ -4,7 +4,8 @@
   "version": "0.2.9.1",
   "main": "lib/index.js",
   "contributors": [
-    "camvan <3499880997@qq.com>"
+    "camvan <3499880997@qq.com>",
+    "TianLuen <1318339790@qq.com>"
   ],
   "repository": "https://github.com/camvanaa/koishi-plugin-grouphelper.git",
   "typings": "lib/index.d.ts",
