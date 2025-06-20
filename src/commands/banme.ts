@@ -2,6 +2,20 @@ import { Context } from 'koishi'
 import { DataService } from '../services'
 import { parseTimeString, formatDuration, readData, saveData } from '../utils'
 
+// 设置默认 similarChars.json 文件内容，如果没有此文件，则创建一个
+function setDefaultSimilarChars() {
+  const defaultSimilarChars = {'α': 'a', 'а': 'a', 'Α': 'a', 'А': 'a', 'ɒ': 'a', 'ɐ': 'a', '𝐚': 'a', '𝐀': 'a', '₳': 'a','ₐ': 'a', 'ₔ': 'a', 'ₕ': 'a', '₠': 'a', '𝓪': 'a', '4': 'a',
+    'е': 'e', 'Е': 'e', 'ε': 'e', 'Ε': 'e', 'ë': 'e', 'Ë': 'e', '𝐞': 'e', '𝐄': 'e', 'ə': 'e', 'Э': 'e', 'э': 'e', '𝓮': 'e',
+    'м': 'm', 'М': 'm', '𝐦': 'm', '𝐌': 'm', 'rn': 'm', 'ₘ': 'm', '₞': 'm', '₥': 'm', '₩': 'm', '₼': 'm', 'ɱ': 'm', '𝓶': 'm',
+    'н': 'n', 'Н': 'n', 'η': 'n', 'Ν': 'n', '𝐧': 'n', '𝐍': 'n', 'И': 'n','ん': 'n', 'ₙ': 'n', '₦': 'n', 'П': 'n', 'п': 'n', '∩': 'n', 'ñ': 'n', '𝓷': 'n',
+    'в': 'b', 'В': 'b','Ь': 'b', 'ь': 'b', 'β': 'b', 'Β': 'B', '𝐛': 'b', '𝐁': 'B', '♭': 'b', 'ß': 'b', '₧': 'b', '₨': 'b', '₿': 'b', '𝓫': 'b',
+    '我': 'me',
+    '禁言': 'ban',
+    '禁': 'ban',
+    'mute': 'ban',
+    'myself': 'me',}
+  saveData('./data/similarChars.json', defaultSimilarChars)
+}
 
 function normalizeCommand(command: string): string {
   // 移除所有类型的空白字符
@@ -19,36 +33,30 @@ function normalizeCommand(command: string): string {
   // 移除所有零宽字符
   command = command.replace(/[\u200B-\u200D\uFEFF]/g, '')
 
+  // 移除所有 unicode 控制字符、变体选择符
+  command = command.replace(/[\uE000-\uF8FF\uFE00-\uFE0F\uFE20-\uFE2F]/g, '')
+
   // 移除所有组合字符
   command = command.replace(/[\u0300-\u036F\u1AB0-\u1AFF\u20D0-\u20FF]/g, '')
 
-  // 替换相似字符
-  const similarChars: { [key: string]: string } = {
+  var similarChars = readData('./data/similarChars.json')
+  // 如果映射大小为 0
+  if (!similarChars || Object.keys(similarChars).length === 0) {
+      setDefaultSimilarChars() // 如果不存在，设置默认的 similarChars.json 文件内容
+      return '没有找到 banme 形似字符映射，已设置默认映射喵~'
+  } 
+  similarChars = readData('./data/similarChars.json')
 
-    'α': 'a', 'а': 'a', 'Α': 'a', 'А': 'a', 'ɒ': 'a', 'ɐ': 'a', '𝐚': 'a', '𝐀': 'a', '₳': 'a','ₐ': 'a', 'ₔ': 'a', 'ₕ': 'a', '₠': 'a', '𝓪': 'a', '4': 'a',
-    'е': 'e', 'Е': 'e', 'ε': 'e', 'Ε': 'e', 'ë': 'e', 'Ë': 'e', '𝐞': 'e', '𝐄': 'e', 'ə': 'e', 'Э': 'e', 'э': 'e', '𝓮': 'e',
-    'м': 'm', 'М': 'm', '𝐦': 'm', '𝐌': 'm', 'rn': 'm', 'ₘ': 'm', '₞': 'm', '₥': 'm', '₩': 'm', '₼': 'm', 'ɱ': 'm', '𝓶': 'm',
-    'н': 'n', 'Н': 'n', 'η': 'n', 'Ν': 'n', '𝐧': 'n', '𝐍': 'n', 'И': 'n','ん': 'n', 'ₙ': 'n', '₦': 'n', 'П': 'n', 'п': 'n', '∩': 'n', 'ñ': 'n', '𝓷': 'n',
-    'в': 'b', 'В': 'b','Ь': 'b', 'ь': 'b', 'β': 'b', 'Β': 'B', '𝐛': 'b', '𝐁': 'B', '♭': 'b', 'ß': 'b', '₧': 'b', '₨': 'b', '₿': 'b', '𝓫': 'b',
-    '我': 'me',
-    '禁言': 'ban',
-    '禁': 'ban',
-    'mute': 'ban',
-    'myself': 'me',
-  }
-
-  // 替换所有相似字符
-  for (const [similar, normal] of Object.entries(similarChars)) {
-    command = command.replace(new RegExp(similar, 'g'), normal)
+  // 再依次找到命令的每个字符，根据 similarChars.json 中的映射进行替换
+  for(let i = 0; i < command.length; i++) {
+    const char = command[i]
+    if (similarChars[char]) {
+      command = command.replace(new RegExp(char, 'g'), similarChars[char])
+    }
   }
 
   // 移除重复字符
   command = command.replace(/(.)\1+/g, '$1')
-
-  // 检查是否以 'b' 开头
-  if (!command.toLowerCase().startsWith('b')) {
-    return ''
-  }
 
   return command.toLowerCase()
 }
@@ -58,7 +66,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
   ctx.middleware(async (session, next) => {
     if (!session.content || !session.guildId) return next()
 
-    const normalizedContent = normalizeCommand(session.content)
+    const normalizedContent = normalizeCommand(normalizeCommand(session.content))
     if (normalizedContent === 'banme') {
 
       if (session.content !== 'banme') {
@@ -69,8 +77,9 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         const groupConfig = groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
         const banmeConfig = groupConfig.banme || ctx.config.banme
 
-
+        dataService.logCommand(session, 'banme', session.userId, `autoBan: ${banmeConfig.autoBan}`)
         if (banmeConfig.autoBan) {
+          dataService.logCommand(session, 'banme', session.userId, `Auto-ban triggered for suspicious content: ${session.content}`) 
           try {
 
             const records = readData(dataService.banMeRecordsPath)
@@ -282,19 +291,82 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       }
     })
 
+    // 输出 similarChars.json 中的形似字符映射
+  ctx.command('banme-similar', '输出 banme 形似字符映射', { authority: 3 })
+    .action(() => {
+      // 如果 similarChars.json 文件存在
+     
+      var similarChars = readData('./data/similarChars.json')
+      // 如果映射大小为 0
+      if (!similarChars || Object.keys(similarChars).length === 0) {
+        setDefaultSimilarChars() // 如果不存在，设置默认的 similarChars.json 文件内容
+        return '没有找到 banme 形似字符映射，已设置默认映射喵~'
+      }
+      similarChars = readData('./data/similarChars.json')
+      const charList = Object.entries(similarChars).map(([char, replacement]) => `${char} -> ${replacement}`).join('\n')
+      return `当前的 banme 形似字符映射如下喵~\n${charList || '没有形似字符映射喵~'}`
+    })
+
+    // 引用消息，输出规范化后的命令和字符串长度，再每行逐一输出各字符的十六进制值
+  ctx.command('banme-normalize <command:string>', '规范化 banme 命令', { authority: 3 })
+    .action(({ session }, command) => {
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+      const normalizedCommand = normalizeCommand(normalizeCommand(command))
+      const response = `规范化后的命令：${normalizedCommand}\n长度：${normalizedCommand.length}\n字符列表：\n`
+      const charList = normalizedCommand.split('').map((char, index) => `${index + 1}. ${char.charCodeAt(0).toString(16)}`).join('\n')
+      return response + charList
+    })
+
+    // 通过引用消息，添加banme形似字符替换 
+    // 首先将命令规范化
+    // 然后判断是否为5个字母
+    // 如果是，将规范化后的字母与 banme 五个字母一一对应，作为新增的形似字符映射
+    // 将新增的形似字符映射添加到 similarChars.json 中
+  ctx.command('banme-record', '通过引用消息添加banme形似字符替换', { authority: 3 })
+    .action(async ({ session }) => {
+      if (!session.quote) return '请引用一条消息喵~' // 确保引用消息存在
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+      const quotedMessage = session.quote.content.trim()
+      const normalizedCommand = normalizeCommand(normalizeCommand(quotedMessage))
+      if (normalizedCommand.length !== 5) {
+        return '引用的消息必须是5个字母的命令喵~'
+      }
+      var similarChars = readData('./data/similarChars.json')
+      // 如果映射大小为 0
+      if (!similarChars || Object.keys(similarChars).length === 0) {
+        setDefaultSimilarChars() // 如果不存在，设置默认的 similarChars.json 文件内容
+        return '没有找到 banme 形似字符映射，已设置默认映射喵~'
+      }
+      similarChars = readData('./data/similarChars.json')
+      const banmeChars = 'banme'
+      for (let i = 0; i < normalizedCommand.length; i++) {
+        const char = normalizedCommand[i]
+        const banmeChar = banmeChars[i]
+        if (char !== banmeChar) {
+          // 如果字符不相同，添加到 similarChars 中
+          similarChars[char] = banmeChar
+        }
+      }
+      // 保存更新后的 similarChars.json
+      saveData('./data/similarChars.json', similarChars)
+      dataService.logCommand(session, 'banme-record', session.userId, `Added similar chars from "${quotedMessage}"`)
+      return `已添加形似字符映射喵~\n引用的消息：${quotedMessage}\n规范化后的命令：${normalizedCommand}`
+    })
+
+    // 设置banme配置命令
 
   ctx.command('banme-config', '设置banme配置', { authority: 3 })
-    .option('enabled', '-e <enabled:boolean> 是否启用')
-    .option('baseMin', '-min <seconds:number> 最小禁言时间(秒)')
-    .option('baseMax', '-max <minutes:number> 最大禁言时间(分)')
-    .option('rate', '-r <rate:number> 增长率')
-    .option('prob', '-p <probability:number> 金卡基础概率')
-    .option('spity', '-sp <count:number> 软保底抽数')
-    .option('hpity', '-hp <count:number> 硬保底抽数')
-    .option('uptime', '-ut <duration:string> UP奖励时长')
-    .option('losetime', '-lt <duration:string> 歪奖励时长')
-    .option('autoBan', '-ab <enabled:boolean> 是否自动禁言使用特殊字符的用户')
-    .option('reset', '-reset 重置为全局配置')
+    .option('enabled', '--enabled <enabled:boolean> 是否启用')
+    .option('baseMin', '--baseMin <seconds:number> 最小禁言时间(秒)')
+    .option('baseMax', '--baseMax <minutes:number> 最大禁言时间(分)')
+    .option('rate', '--rate <rate:number> 增长率')
+    .option('prob', '--prob <probability:number> 金卡基础概率')
+    .option('spity', '--spity <count:number> 软保底抽数')
+    .option('hpity', '--hpity <count:number> 硬保底抽数')
+    .option('uptime', '--uptime <duration:string> UP奖励时长')
+    .option('losetime', '--losetime <duration:string> 歪奖励时长')
+    .option('autoBan', '--autoBan <enabled:boolean> 是否自动禁言使用特殊字符的用户')
+    .option('reset', '--reset 重置为全局配置')
     .action(async ({ session, options }) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
 
@@ -312,7 +384,17 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       banmeConfig.jackpot = banmeConfig.jackpot || { ...ctx.config.banme.jackpot }
 
 
-      if (options.enabled !== undefined) banmeConfig.enabled = options.enabled
+      if (options.enabled !== undefined)
+      {
+        const enabled = options.enabled.toString().toLowerCase()
+        if (enabled === 'true' || enabled === '1' || enabled === 'yes' || enabled === 'y' || enabled === 'on') {
+          banmeConfig.enabled = true
+        } else if (enabled === 'false' || enabled === '0' || enabled === 'no' || enabled === 'n' || enabled === 'off') {
+          banmeConfig.enabled = false
+        } else {
+          return '启用选项无效，请输入 true/false'
+        }
+      }
       if (options.baseMin) banmeConfig.baseMin = options.baseMin
       if (options.baseMax) banmeConfig.baseMax = options.baseMax
       if (options.rate) banmeConfig.growthRate = options.rate
@@ -321,8 +403,17 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       if (options.hpity) banmeConfig.jackpot.hardPity = options.hpity
       if (options.uptime) banmeConfig.jackpot.upDuration = options.uptime
       if (options.losetime) banmeConfig.jackpot.loseDuration = options.losetime
-      if (options.autoBan !== undefined) banmeConfig.autoBan = options.autoBan
-
+      if (options.autoBan !== undefined)
+      {
+        const autoBan = options.autoBan.toString().toLowerCase()
+        if (autoBan === 'true' || autoBan === '1' || autoBan === 'yes' || autoBan === 'y' || autoBan === 'on') {
+          banmeConfig.autoBan = true
+        } else if (autoBan === 'false' || autoBan === '0' || autoBan === 'no' || autoBan === 'n' || autoBan === 'off') {
+          banmeConfig.autoBan = false
+        } else {
+          return '自动禁言选项无效，请输入 true/false'
+        }
+      }
       groupConfigs[session.guildId].banme = banmeConfig
       saveData(dataService.groupConfigPath, groupConfigs)
 
