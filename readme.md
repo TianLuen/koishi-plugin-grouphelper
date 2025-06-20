@@ -136,3 +136,9 @@
 - `banme-similar` 输出形似字符映射（权限等级3）
 - `banme-record *引用消息*` 记录形似字符（权限等级3）
 - `banme-normalize *引用消息*` 输出规范化文本（权限等级3）
+
+### 🤝 贡献
+- 如果你发现了任何问题或有新的功能建议，欢迎在 [GitHub Issues](https://github.com/camvanaa/koishi-plugin-grouphelper/issues) 提出
+- 如果你想为这个项目做出贡献，欢迎提交 Pull Request
+
+[![Contributors](https://contrib.rocks/image?repo=camvanaa/koishi-plugin-grouphelper)](https://github.com/camvanaa/koishi-plugin-grouphelper/graphs/contributors)
