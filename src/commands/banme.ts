@@ -27,8 +27,8 @@ function normalizeCommand(command: string): string {
   // 移除所有数学符号
   command = command.replace(/[\u2200-\u22FF\u2100-\u214F]/g, '')
 
-  // 移除所有装饰符号
-  command = command.replace(/[\u2600-\u26FF\u2700-\u27BF]/g, '')
+  // 移除所有装饰符号，除了u266d
+  command = command.replace(/[\u2600-\u266C\u266E-\u26FF\u2700-\u27BF]/g, '')
 
   // 移除所有零宽字符
   command = command.replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -43,16 +43,13 @@ function normalizeCommand(command: string): string {
   // 如果映射大小为 0
   if (!similarChars || Object.keys(similarChars).length === 0) {
       setDefaultSimilarChars() // 如果不存在，设置默认的 similarChars.json 文件内容
-      return '没有找到 banme 形似字符映射，已设置默认映射喵~'
   } 
   similarChars = readData('./data/similarChars.json')
 
-  // 再依次找到命令的每个字符，根据 similarChars.json 中的映射进行替换
-  for(let i = 0; i < command.length; i++) {
-    const char = command[i]
-    if (similarChars[char]) {
-      command = command.replace(new RegExp(char, 'g'), similarChars[char])
-    }
+  // 遍历映射表，匹配并替换字符
+  for (const [char, replacement] of Object.entries(similarChars)) {
+    const regex = new RegExp(char, 'g')
+    command = command.replace(regex, replacement as string)
   }
 
   // 移除重复字符
@@ -292,7 +289,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
     })
 
     // 输出 similarChars.json 中的形似字符映射
-  ctx.command('banme-similar', '输出 banme 形似字符映射', { authority: 3 })
+  ctx.command('banme-similar', '输出 banme 形似字符映射表', { authority: 3 })
     .action(() => {
       // 如果 similarChars.json 文件存在
      
@@ -319,41 +316,50 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
 
     // 通过引用消息，添加banme形似字符替换 
     // 首先将命令规范化
-    // 然后判断是否为5个字母
-    // 如果是，将规范化后的字母与 banme 五个字母一一对应，作为新增的形似字符映射
+    // 然后判断是否和对应的字符串长度相同
+    // 如果是，将规范化后的字母与对应字符串一一对应，作为新增的形似字符映射
     // 将新增的形似字符映射添加到 similarChars.json 中
-  ctx.command('banme-record', '通过引用消息添加banme形似字符替换', { authority: 3 })
-    .action(async ({ session }) => {
-      if (!session.quote) return '请引用一条消息喵~' // 确保引用消息存在
+
+  ctx.command('banme-record-as <standardCommand:string>', '通过引用消息逐字符添加形似字符替换', { authority: 3 })
+    .action(async ({ session }, standardCommand) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
-      const quotedMessage = session.quote.content.trim()
+      if (!session.quote) return '请引用一条消息来记录映射喵~'
+      if (standardCommand.length === 0) return '请提供标准命令字符串喵~'
+
+      const quotedMessage = session.quote.content
       const normalizedCommand = normalizeCommand(normalizeCommand(quotedMessage))
-      if (normalizedCommand.length !== 5) {
-        return '引用的消息必须是5个字母的命令喵~'
+
+      if (normalizedCommand.length !== standardCommand.length) {
+        return '映射记录失败喵~\n' + '规范化字符串:' + normalizedCommand + '\n' + '对应的标准串:' + standardCommand + '\n' + '两者长度不一致喵~'
       }
-      var similarChars = readData('./data/similarChars.json')
-      // 如果映射大小为 0
-      if (!similarChars || Object.keys(similarChars).length === 0) {
-        setDefaultSimilarChars() // 如果不存在，设置默认的 similarChars.json 文件内容
-        return '没有找到 banme 形似字符映射，已设置默认映射喵~'
-      }
-      similarChars = readData('./data/similarChars.json')
-      const banmeChars = 'banme'
+
+      const similarChars = readData('./data/similarChars.json') || {}
       for (let i = 0; i < normalizedCommand.length; i++) {
-        const char = normalizedCommand[i]
-        const banmeChar = banmeChars[i]
-        if (char !== banmeChar) {
-          // 如果字符不相同，添加到 similarChars 中
-          similarChars[char] = banmeChar
+        const originalChar = normalizedCommand[i]
+        const standardChar = standardCommand[i]
+        if (standardChar !== originalChar) {
+          similarChars[originalChar] = standardChar
         }
       }
-      // 保存更新后的 similarChars.json
+
       saveData('./data/similarChars.json', similarChars)
-      dataService.logCommand(session, 'banme-record', session.userId, `Added similar chars from "${quotedMessage}"`)
-      return `已添加形似字符映射喵~\n引用的消息：${quotedMessage}\n规范化后的命令：${normalizedCommand}`
+      return '已记录形似字符映射喵~\n'+'规范化字符串：' + normalizedCommand + '\n' + '对应的标准串：' + standardCommand
     })
 
-    // 设置banme配置命令
+  ctx.command('banme-record-allas <standardCommand:string>', '通过引用消息添加字符串映射', { authority: 3 })
+    .action(async ({ session }, standardCommand) => {
+      if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
+      if (!session.quote) return '请引用一条消息来记录映射喵~'
+      if (standardCommand.length === 0) return '请提供一个标准字符串喵~'
+
+      const quotedMessage = session.quote.content
+
+      const similarChars = readData('./data/similarChars.json') || {}
+      similarChars[quotedMessage]= standardCommand
+
+      saveData('./data/similarChars.json', similarChars)
+      return '已记录字符串映射喵~\n'+'原字符串：' + quotedMessage + '\n' + '对应的标准串：' + standardCommand
+    })
 
   ctx.command('banme-config', '设置banme配置', { authority: 3 })
     .option('enabled', '--enabled <enabled:boolean> 是否启用')
