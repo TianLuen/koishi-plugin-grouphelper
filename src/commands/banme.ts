@@ -320,10 +320,11 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
     // 如果是，将规范化后的字母与对应字符串一一对应，作为新增的形似字符映射
     // 将新增的形似字符映射添加到 similarChars.json 中
 
-  ctx.command('banme-record-as', '通过引用消息逐字符添加形似字符替换', { authority: 3 })
+  ctx.command('banme-record-as <standardCommand:string>', '通过引用消息逐字符添加形似字符替换', { authority: 3 })
     .action(async ({ session }, standardCommand) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       if (!session.quote) return '请引用一条消息来记录映射喵~'
+      if (standardCommand.length === 0) return '请提供标准命令字符串喵~'
 
       const quotedMessage = session.quote.content
       const normalizedCommand = normalizeCommand(normalizeCommand(quotedMessage))
@@ -345,10 +346,11 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       return '已记录形似字符映射喵~\n'+'规范化字符串：' + normalizedCommand + '\n' + '对应的标准串：' + standardCommand
     })
 
-  ctx.command('banme-record-allas', '通过引用消息添加字符串映射', { authority: 3 })
+  ctx.command('banme-record-allas <standardCommand:string>', '通过引用消息添加字符串映射', { authority: 3 })
     .action(async ({ session }, standardCommand) => {
       if (!session.guildId) return '喵呜...这个命令只能在群里用喵...'
       if (!session.quote) return '请引用一条消息来记录映射喵~'
+      if (standardCommand.length === 0) return '请提供一个标准字符串喵~'
 
       const quotedMessage = session.quote.content
 

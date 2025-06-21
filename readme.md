@@ -188,6 +188,6 @@
   - `-ab {true|false}` 是否自动禁言使用特殊字符的用户
   - `-reset` 重置为全局配置
 - `banme-similar` 输出形似字符映射（权限等级3）
-- `banme-record-as *引用消息*` 逐字符添加形似字符映射（权限等级3）
-- `banme-record-allas *引用消息*` 添加字符串映射（权限等级3）
+- `banme-record-a <标准串> *引用消息*` 逐字符添加形似字符映射（权限等级3）
+- `banme-record-allas <标准串> *引用消息*` 添加字符串映射（权限等级3）
 - `banme-normalize *引用消息*` 输出规范化文本（权限等级3）
