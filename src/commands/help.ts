@@ -1,12 +1,15 @@
 import { Context } from 'koishi'
 import { DataService } from '../services'
-import { parseTimeString, formatDuration } from '../utils'
+import { parseUserId, parseTimeString, formatDuration, readData, saveData } from '../utils'
 
 export function registerHelpCommands(ctx: Context, dataService: DataService) {
 
   ctx.command('grouphelper', '群管理帮助', { authority: 3 })
-    .action(async ({ session }) => {
-      return `=== 基础命令 ===
+    .option('a', '-a 显示所有可用命令')
+    .action(async ({ session, options}) => {
+      if(options.a)
+      {
+        return `=== 基础命令 ===
 kick <@用户> [-b] [群号]  踢出用户，-b 表示加入黑名单
 ban <@用户> {时长} [群号]  禁言用户，支持表达式
 unban <@用户> [群号]  解除用户禁言
@@ -148,7 +151,9 @@ banme-normalize *引用消息* 输出规范化文本（权限等级3）
 · 时间范围：1秒 ~ 29天23小时59分59秒
 
 注：大部分命令需要权限等级 3 或以上`
-    })
+    }
+    return '强大的群管理插件，提供一系列实用的群管理功能\n' + '使用参数 -a 查看所有可用命令'
+  })
 
 
   ctx.command('parse-time <expression:text>', '测试时间解析', { authority: 1 })

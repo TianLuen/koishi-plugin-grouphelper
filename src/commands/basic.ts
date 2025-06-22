@@ -6,7 +6,7 @@ import { AntiRepeatConfig } from '../types'
 
 export function registerBasicCommands(ctx: Context, dataService: DataService) {
 
-  ctx.command('kick <input:text>', '踢出用户', { authority: 3 })
+  ctx.command('lkick <input:text>', '踢出用户', { authority: 3 })
     .example('kick @用户')
     .example('kick 123456789')
     .example('kick @用户 群号')
@@ -65,7 +65,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       const targetGroup = groupId || session.guildId
 
       try {
-        await session.bot.kickGuildMember(targetGroup, userId)
+        await session.bot.kickGuildMember(targetGroup, userId, hasBlackOption)
 
         if (hasBlackOption) {
           const blacklist = readData(dataService.blacklistPath)
