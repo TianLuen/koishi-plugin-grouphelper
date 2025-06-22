@@ -65,7 +65,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
       const targetGroup = groupId || session.guildId
 
       try {
-        await session.bot.kickGuildMember(targetGroup, userId)
+        await session.bot.kickGuildMember(targetGroup, userId, hasBlackOption)
 
         if (hasBlackOption) {
           const blacklist = readData(dataService.blacklistPath)
