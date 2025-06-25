@@ -446,4 +446,26 @@ antirepeat 0 - 关闭复读检测`
       dataService.logCommand(session, 'antirepeat', session.guildId, `已设置阈值为 ${threshold} 并启用`)
       return `已设置本群复读阈值为 ${threshold} 条并启用检测喵~`
     })
-}
+
+    // 随机数生成器，格式 dice <面数> [个数]
+  ctx.command('dice <sides:number> [count:number]', '掷骰子', { authority: 1 })
+    .example('dice 6') // 掷一个6面骰
+    .example('dice 20 3') // 掷三个20面骰
+    .action(async ({ session }, sides, count = 1) => {
+      if (sides < 2 || count < 1) {
+        return '喵呜...骰子面数至少为2，个数至少为1喵~'
+      }
+      
+      const results = []
+      for (let i = 0; i < count; i++) {
+        results.push(Math.floor(Math.random() * sides) + 1)
+      }
+      if(count === 1) {
+        return `掷骰子结果：${results[0]}`
+      }
+      else {
+        return `掷骰子结果：${results.join(', ')}`+`\n 总和：${results.reduce((a, b) => a + b, 0)}`
+      }
+    })
+
+  }
