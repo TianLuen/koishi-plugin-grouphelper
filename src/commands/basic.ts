@@ -467,5 +467,24 @@ antirepeat 0 - 关闭复读检测`
         return `掷骰子结果：${results.join(', ')}`+`\n 总和：${results.reduce((a, b) => a + b, 0)}`
       }
     })
+      // 引用一条消息，向指定群聊发送指定消息，使用 -s 选项静默发送
+  ctx.command('send <groupId:string>', '向指定群发送消息', { authority: 3 })
+    .example('send 123456789')
+    .option('s', '-s 静默发送，不显示发送者信息')
+    .action(async ({ session, options }, groupId) => {
+      if (!session.quote) return '喵喵！请回复要发送的消息呀~'
 
+      try {
+        if(options.s)
+          await session.bot.sendMessage(groupId, session.quote.content)
+        else
+          await session.bot.sendMessage(groupId, '用户' + session.userId + '远程投送消息：\n' +session.quote.content)
+
+        dataService.logCommand(session, 'send', groupId, `已发送消息：${session.quote.messageId}`)
+        return `已将消息发送到群 ${groupId} 喵~`
+      } catch (e) {
+        dataService.logCommand(session, 'send', groupId, `Failed: ${e.message}`)
+        return `喵呜...发送失败了：${e.message}`
+      }
+    })
   }
