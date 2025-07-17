@@ -25,10 +25,10 @@ function normalizeCommand(command: string): string {
   command = command.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
 
   // 移除所有数学符号
-  command = command.replace(/[\u2200-\u22FF\u2100-\u214F]/g, '')
+  //command = command.replace(/[\u2200-\u22FF\u2100-\u214F]/g, '')
 
   // 移除所有装饰符号，除了u266d
-  command = command.replace(/[\u2600-\u266C\u266E-\u26FF\u2700-\u27BF]/g, '')
+  //command = command.replace(/[\u2600-\u266C\u266E-\u26FF\u2700-\u27BF]/g, '')
 
   // 移除所有零宽字符
   command = command.replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -67,16 +67,12 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
     if (normalizedContent === 'banme') {
 
       if (session.content !== 'banme') {
-        dataService.logCommand(session, 'banme', session.userId, `Suspicious: ${session.content}`)
-
 
         const groupConfigs = readData(dataService.groupConfigPath)
         const groupConfig = groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
         const banmeConfig = groupConfig.banme || ctx.config.banme
 
-        dataService.logCommand(session, 'banme', session.userId, `autoBan: ${banmeConfig.autoBan}`)
         if (banmeConfig.autoBan) {
-          dataService.logCommand(session, 'banme', session.userId, `Auto-ban triggered for suspicious content: ${session.content}`) 
           try {
 
             const records = readData(dataService.banMeRecordsPath)

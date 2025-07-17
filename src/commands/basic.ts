@@ -156,7 +156,30 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
         return `喵呜...禁言失败了：${e.message}`
       }
     })
-
+  
+  // stop 固定禁言时长10分钟，除非已在禁言中
+  ctx.command('stop <user:user>', '短期禁言', {authority: 2})
+    .action(async ({ session }, user) => {
+      if (!user) return '请指定用户'
+      const userId = String(user).split(':')[1]
+      // 从 mutes 中读取剩余禁言时长
+      const mutes = readData(dataService.mutesPath)
+      const lastMute = mutes[session.guildId][userId]
+      if (lastMute.startTime + lastMute.duration > Date.now()) {
+        dataService.logCommand(session, 'stop', userId, '失败：已在禁言中')
+        return `喵呜...${userId} 已经处于禁言状态啦，不需要短期禁言喵~`
+      }
+      try {
+        await session.bot.muteGuildMember(session.guildId, userId, 600000)
+        dataService.recordMute(session.guildId, userId, 600000)
+        dataService.logCommand(session, 'stop', userId, '已短期禁言')
+        return `已将 ${userId} 短期禁言啦喵~`
+      } catch (e) {
+        dataService.logCommand(session, 'stop', userId, '失败')
+        return `喵呜...短期禁言失败了：${e.message}`
+      }
+    })
+    
 
   ctx.command('unban <input:text>', '解除用户禁言', { authority: 3 })
     .example('unban @用户')
@@ -209,6 +232,7 @@ export function registerBasicCommands(ctx: Context, dataService: DataService) {
 
       try {
         await session.bot.muteGuildMember(targetGroup, userId, 0)
+        dataService.recordMute(targetGroup, userId, 0)
         dataService.logCommand(session, 'unban', userId, `Success: Unmuted in group ${targetGroup}`)
         return `已经把 ${userId} 的禁言解除啦喵！开心~`
       } catch (e) {
