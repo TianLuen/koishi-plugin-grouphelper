@@ -13,6 +13,7 @@ export function registerHelpCommands(ctx: Context, dataService: DataService) {
 kick <@用户> [-b] [群号]  踢出用户，-b 表示加入黑名单
 ban <@用户> {时长} [群号]  禁言用户，支持表达式
 unban <@用户> [群号]  解除用户禁言
+stop <@用户> 短期禁言用户
 ban-all  开启全体禁言
 unban-all  解除全体禁言
 unban-allppl  解除所有人禁言
@@ -58,6 +59,8 @@ forbidden  禁言关键词管理：
   -r <关键词>  移除禁言关键词，多个关键词用英文逗号分隔
   --clear 清空所有禁言关键词
   -d {true|false}  设置是否自动撤回包含关键词的消息
+  -b {true|false}  设置是否自动禁言包含关键词的用户
+  -t <时长>  设置自动禁言时长，支持表达式
 
 === 欢迎设置 ===
 welcome  入群欢迎语管理：
