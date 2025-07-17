@@ -472,15 +472,76 @@ antirepeat 0 - 关闭复读检测`
       return `已设置本群复读阈值为 ${threshold} 条并启用检测喵~`
     })
 
+    // dice 功能开关
+  ctx.command('dice-config', '掷骰子功能开关', { authority: 3 })
+  .option('e', '-e <enabled:string> 启用或禁用掷骰子功能')
+  .option('l', '-l <length:number> 设置掷骰子结果长度限制')
+    .action(async ({ session, options }) => {
+      if(options.e)
+      {
+        const enabled = options.e.toString().toLowerCase()
+        if (enabled === 'true' || enabled === '1' || enabled === 'yes' || enabled === 'y' || enabled === 'on') {
+          const groupConfigs = readData(dataService.groupConfigPath)
+          groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
+          groupConfigs[session.guildId].dice = groupConfigs[session.guildId].dice || {}
+          groupConfigs[session.guildId].dice.enabled = true
+          saveData(dataService.groupConfigPath, groupConfigs)
+            dataService.logCommand(session, 'dice-enabled', session.guildId, '成功：已启用掷骰子功能')
+            return '掷骰子功能已启用喵~'
+        } else if (enabled === 'false' || enabled === '0' || enabled === 'no' || enabled === 'n' || enabled === 'off') {
+            const groupConfigs = readData(dataService.groupConfigPath)
+          groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
+          groupConfigs[session.guildId].dice = groupConfigs[session.guildId].dice || {}
+          groupConfigs[session.guildId].dice.enabled = false
+          saveData(dataService.groupConfigPath, groupConfigs)
+            dataService.logCommand(session, 'dice-enabled', session.guildId, '成功：已禁用掷骰子功能')
+            return '掷骰子功能已禁用喵~'
+        } else {
+            dataService.logCommand(session, 'dice-enabled', session.guildId, '失败：设置无效')
+            return '掷骰子选项无效，请输入 true/false'
+        }
+      }
+      else if(options.l)
+      {
+        const length = options.l as number
+        const groupConfigs = readData(dataService.groupConfigPath)
+        groupConfigs[session.guildId] = groupConfigs[session.guildId] || {}
+        groupConfigs[session.guildId].dice = groupConfigs[session.guildId].dice || {}
+        groupConfigs[session.guildId].dice.lengthLimit = length
+        saveData(dataService.groupConfigPath, groupConfigs)
+        dataService.logCommand(session, 'dice-length', session.guildId, `成功：已设置掷骰子结果长度限制为 ${length}`)
+        return `已设置掷骰子结果长度限制为 ${length} 喵~`
+      }
+
+    })
+
     // 随机数生成器，格式 dice <面数> [个数]
   ctx.command('dice <sides:number> [count:number]', '掷骰子', { authority: 1 })
     .example('dice 6') // 掷一个6面骰
     .example('dice 20 3') // 掷三个20面骰
     .action(async ({ session }, sides, count = 1) => {
+
+      const groupConfigs = readData(dataService.groupConfigPath)
+      const diceConfig = groupConfigs[session.guildId].dice || ctx.config.dice || {}
+
+      // 读取 groupConfig 中的掷骰子功能开关
+      if (!diceConfig.enabled) {
+        return ''
+      }
+
+      if (!sides) {
+        return '喵呜...请指定骰子面数喵~'
+      }
+
       if (sides < 2 || count < 1) {
         return '喵呜...骰子面数至少为2，个数至少为1喵~'
       }
-      
+
+
+      if ((Math.log10(sides)+1)*count > diceConfig.lengthLimit) {
+        return '喵呜...掷骰子结果过长，请选择较少的面数或个数喵~'
+      }
+
       const results = []
       for (let i = 0; i < count; i++) {
         results.push(Math.floor(Math.random() * sides) + 1)
