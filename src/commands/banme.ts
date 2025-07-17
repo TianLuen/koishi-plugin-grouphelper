@@ -158,7 +158,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
             }
 
             dataService.logCommand(session, 'banme', session.userId,
-              `Success: ${timeStr} (Jackpot: ${isJackpot}, Pity: ${records[session.guildId].pity}, Count: ${records[session.guildId].count})`)
+              `成功: ${timeStr} (Jackpot: ${isJackpot}, Pity: ${records[session.guildId].pity}, Count: ${records[session.guildId].count})`)
             await session.send(message)
             return
           } catch (e) {
@@ -186,7 +186,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       const banmeConfig = groupConfig.banme || ctx.config.banme
 
       if (!banmeConfig.enabled) {
-        dataService.logCommand(session, 'banme', session.userId, 'Failed: Feature disabled')
+        dataService.logCommand(session, 'banme', session.userId, '失败：功能禁用')
         return '喵呜...banme功能现在被禁用了呢...'
       }
 
@@ -275,11 +275,11 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         }
 
         dataService.logCommand(session, 'banme', session.userId,
-          `Success: ${timeStr} (Jackpot: ${isJackpot}, Pity: ${records[session.guildId].pity}, Count: ${records[session.guildId].count})`)
+          `成功：${timeStr} (Jackpot: ${isJackpot}, Pity: ${records[session.guildId].pity}, Count: ${records[session.guildId].count})`)
         return message
 
       } catch (e) {
-        dataService.logCommand(session, 'banme', session.userId, `Failed: ${e.message}`)
+        dataService.logCommand(session, 'banme', session.userId, `失败：未知错误`)
         return `喵呜...禁言失败了：${e.message}`
       }
     })
@@ -339,6 +339,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       }
 
       saveData('./data/similarChars.json', similarChars)
+      dataService.logCommand(session, 'banme-record-as', session.userId, `成功`)
       return '已记录形似字符映射喵~\n'+'规范化字符串：' + normalizedCommand + '\n' + '对应的标准串：' + standardCommand
     })
 
@@ -354,6 +355,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
       similarChars[quotedMessage]= standardCommand
 
       saveData('./data/similarChars.json', similarChars)
+      dataService.logCommand(session, 'banme-record-allas', session.userId, `成功`)
       return '已记录字符串映射喵~\n'+'原字符串：' + quotedMessage + '\n' + '对应的标准串：' + standardCommand
     })
 
@@ -394,6 +396,7 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         } else if (enabled === 'false' || enabled === '0' || enabled === 'no' || enabled === 'n' || enabled === 'off') {
           banmeConfig.enabled = false
         } else {
+          dataService.logCommand(session, 'banme-config', session.userId, '失败：启用选项无效')
           return '启用选项无效，请输入 true/false'
         }
       }
@@ -413,12 +416,13 @@ export function registerBanmeCommands(ctx: Context, dataService: DataService) {
         } else if (autoBan === 'false' || autoBan === '0' || autoBan === 'no' || autoBan === 'n' || autoBan === 'off') {
           banmeConfig.autoBan = false
         } else {
+          dataService.logCommand(session, 'banme-config', session.userId, '失败：自动禁言选项无效')
           return '自动禁言选项无效，请输入 true/false'
         }
       }
       groupConfigs[session.guildId].banme = banmeConfig
       saveData(dataService.groupConfigPath, groupConfigs)
-
+      dataService.logCommand(session, 'banme-config', session.userId,'成功：更新banme配置')
       return '配置已更新喵~'
     })
 }
