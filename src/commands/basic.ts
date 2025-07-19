@@ -554,6 +554,43 @@ antirepeat 0 - 关闭复读检测`
       }
     })
 
+  ctx.command('quit-group <groupId:string>', '退出指定群聊', { authority: 4 })
+    .example('quit-group 123456789')
+    .action(async ({ session }, groupId) => {
+      if (!groupId) return '喵呜...请指定要退出的群聊ID喵~'
+      try {
+        await session.bot.internal.setGroupLeave(groupId, false)
+        dataService.logCommand(session, 'quit-group', groupId, `成功：已退出群聊 ${groupId}`)
+        return `已成功退出群聊 ${groupId} 喵~`
+      } catch (e) {
+        dataService.logCommand(session, 'quit-group', groupId, `失败：未知错误`)
+        return `喵呜...退出群聊失败了：${e.message}`
+      }
+    })
+
+  ctx.command('nickname <user:user> <nickname:string>', '设置用户昵称', { authority: 3 })
+    .example('nickname 123456789 小猫咪')
+    .action(async ({ session }, user, nickname) => {
+      if (!user) return '喵呜...请指定用户喵~'
+
+      const userId = String(user).split(':')[1]
+      try {
+        if (nickname) {
+          await session.bot.internal.setGroupCard(session.guildId, userId, nickname)
+          dataService.logCommand(session, 'nickname', userId, `成功：已设置昵称为 ${nickname}`)
+          return `已将 ${userId} 的昵称设置为 "${nickname}" 喵~`
+        }
+        else{
+          await session.bot.internal.setGroupCard(session.guildId, userId)
+          dataService.logCommand(session, 'nickname', userId, `成功：已清除昵称`)
+          return `已将 ${userId} 的昵称清除喵~`
+        }
+      } catch (e) {
+        dataService.logCommand(session, 'nickname', userId, `失败：未知错误`)
+        return `喵呜...设置昵称失败了：${e.message}`
+      }
+    })
+
       // 引用一条消息，向指定群聊发送指定消息，使用 -s 选项静默发送
   ctx.command('send <groupId:string>', '向指定群发送消息', { authority: 3 })
     .example('send 123456789')
